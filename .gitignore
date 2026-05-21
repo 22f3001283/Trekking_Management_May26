@@ -1,0 +1,30 @@
+# Node.js / Vue.js
+/node_modules/
+/dist/
+/.env
+
+# npm logs
+npm-debug.log*
+yarn-debug. log*
+yarn-error.log*
+
+# Vite cache
+.vite/
+
+# Python
+".pyc
+*. pyo
+*. pyd
+__pycache_/
+env/
+venv/
+*.env
+
+# VS Code
+.vscode/
+
+# Mac Os
+.DS_Store
+
+# Windows
+Thumbs.db
