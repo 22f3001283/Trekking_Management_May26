@@ -18,6 +18,6 @@
 	</div>
 </template>
 
-<script setup>
+<script>
 import homeImg from "../assets/homePage.jpg"
 </script>
