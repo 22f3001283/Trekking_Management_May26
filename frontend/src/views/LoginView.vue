@@ -8,41 +8,46 @@
         <input id="password" v-model="formdata.password" type="text">
 
         <button @click.prevent="login()"> Submit </button>
-
     </form>
 </template>
 
 <script>
 import axios from 'axios';
 
-export default{
-	data(){
-		return {
+export default {
+    data() {
+        return {
             formdata: {
-                "email" : "",
-                "password" : ""
-            }
-		}
-	},
-	methods:{
-		async login(){
-            try {
-                const resp=await axios.post("http://127.0.0.1:5000/login", this.formdata)
-                console.log(resp);
-                localStorage.setItem('token', resp.data.token)
-                localStorage.setItem('token', resp.data.token)
-                if(resp.data.role==="admin")
-                    this.$router.push('/admin')
-                else if(resp.data.role==="staff")
-                    this.$router.push('/staff')
-                else if(resp.data.role==="user")
-                    this.$router.push('/user')
-                else
-                    this.$router.push('/')
-            } catch (err) {
-                alert(err.response?.data?.msg || "Login failed")
+                "email": "",
+                "password": ""
             }
         }
-	}
+    },
+    methods: {
+        async login() {
+            try {
+                const resp = await axios.post("http://127.0.0.1:5000/login", this.formdata)
+                localStorage.setItem('token', resp.data.token)
+                localStorage.setItem('user_id', resp.data.user_id)
+                localStorage.setItem('role', resp.data.role)
+
+                if (resp.data.role === "admin")
+                    this.$router.push('/admin')
+                else if (resp.data.role === "staff")
+                    this.$router.push('/staff')
+                else if (resp.data.role === "user")
+                    this.$router.push(`/user/${resp.data.user_id}`)
+                else
+                    this.$router.push('/signup')
+            } catch (err) {
+                if (err.response?.status === 404) {
+                    alert(err.response.data.msg || "User not found")
+                    this.$router.push('/signup')
+                } else {
+                    alert(err.response?.data?.msg || "Login failed")
+                }
+            }
+        }
+    }
 }
 </script>

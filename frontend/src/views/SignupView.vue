@@ -41,7 +41,16 @@ export default{
                 this.$router.push({ name: 'login' })
             }
         } catch (err) {
-            alert(err.response?.data?.msg || "Signup failed")
+            if (err.response?.status === 409 && err.response.data.msg === "Username already exists!") {
+                alert(err.response.data.msg || "User already exists")
+                this.$router.push('/signup')
+            }
+            else if (err.response?.status === 409 && err.response.data.msg === "Email already exists, Please login") {
+                alert(err.response.data.msg || "User already exists")
+                this.$router.push('/login')
+            }
+            else
+                alert(err.response?.data?.msg || "Signup failed")
         }
         }
     }
