@@ -1,20 +1,8 @@
 <template>
   <nav class="navbar navbar-light bg-light fixed-top">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">User Dashboard</a>
+      <a class="navbar-brand" href="#">Staff Dashboard</a>
       <div class="d-flex gap-3 align-items-center">
-        <div class="icon-wrap">
-          <button class="icon-btn" @click="goToHistory">
-            <img src="../assets/history.png" alt="History" class="nav-icon" />
-          </button>
-          <span class="tooltip-label">History</span>
-        </div>
-        <div class="icon-wrap">
-          <button class="icon-btn">
-            <img src="../assets/profile.png" alt="Profile" class="nav-icon" />
-          </button>
-          <span class="tooltip-label">Profile</span>
-        </div>
         <div class="icon-wrap">
           <button class="icon-btn" @click="signOut">
             <img src="../assets/signout.png" alt="Sign Out" class="nav-icon" />
@@ -29,9 +17,6 @@
 <script>
 export default {
   methods: {
-    goToHistory() {                                    
-      this.$router.push('/bookings')
-    },
     signOut() {
       localStorage.removeItem('token')
       localStorage.removeItem('user_id')

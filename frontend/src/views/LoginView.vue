@@ -35,7 +35,7 @@ export default {
                 if (resp.data.role === "admin")
                     this.$router.push('/admin')
                 else if (resp.data.role === "staff")
-                    this.$router.push('/staff')
+                    this.$router.push(`/staff/${resp.data.user_id}`)
                 else if (resp.data.role === "user")
                     this.$router.push(`/user/${resp.data.user_id}`)
                 else

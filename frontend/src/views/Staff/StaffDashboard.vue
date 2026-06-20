@@ -1,9 +1,10 @@
 <template>
-    <div class="container-fluid" style="margin-top: 70px;">
-        <h1 class="text-center mb-4">Staff Dashboard</h1>
-    </div>
+    <StaffNavbar />
 
-    <div class="container-fluid" style="padding-left: 100px; padding-right: 100px;">
+    <div class="container-fluid" style="padding-left: 100px; padding-right: 100px; padding-top: 80px;">
+
+        <h2 style="padding-bottom: 5px;">My Assigned Treks</h2>
+
         <div class="d-flex gap-2 mb-3 align-items-right justify-content-end">
 
             <!-- Search -->
@@ -64,7 +65,6 @@
 
     <!-- Trek Cards -->
     <div id="trekPanel" style="padding-left: 100px; padding-right: 100px;">
-        <h2>My Assigned Treks</h2>
         <div v-if="filteredTreks.length > 0" class="row g-4">
             <div v-for="trek in filteredTreks" :key="trek.trek_id" class="col-md-4 col-lg-3">
                 <div class="card h-100">
@@ -112,6 +112,11 @@
                                 data-bs-target="#staffTrekModal"
                                 style="background-color: #9e52eb;"
                             >Manage</button>
+                            <button
+                                class="btn btn-sm text-white"
+                                @click="handleViewBookings(trek)"
+                                style="background-color: #9e52eb;"
+                            >View Bookings</button>                            
                         </div>
                     </div>
                 </div>
@@ -174,9 +179,13 @@
 <script>
 import axios from 'axios'
 import TrekDefault from '../../assets/TrekDefault.png'
+import StaffNavbar from '../../components/StaffNavbar.vue'
 
 export default {
     name: 'StaffDashboard',
+    components: {
+        StaffNavbar
+    },
     data() {
         return {
             TrekDefault,
@@ -238,6 +247,9 @@ export default {
             this.currentTrek = trek
             this.manageForm.available_slots = trek.available_slots
             this.manageForm.status = ['Open', 'Closed'].includes(trek.status) ? trek.status : 'Open'
+        },
+        handleViewBookings(trek) {
+            this.$router.push({ path: '/bookings', query: { trek_id: trek.trek_id } })
         },
         async handleSaveChanges() {
             try {

@@ -26,7 +26,7 @@
             <a class="nav-link" href="#staff">Staff</a>
           </li>
           <li class="nav-item mb-2">
-            <a class="nav-link" @click="() => $router.push('/admin/bookings')">Bookings</a>
+            <a class="nav-link" @click="() => $router.push('/bookings')">Bookings</a>
           </li>
           <li class="nav-item mb-2">
             <a class="nav-link" href="#users">Users</a>
@@ -45,6 +45,8 @@ export default {
   methods: {
     signOut() {
       localStorage.removeItem('token')
+      localStorage.removeItem('user_id')
+      localStorage.removeItem('role')
       this.$router.push('/login')
     }
   }

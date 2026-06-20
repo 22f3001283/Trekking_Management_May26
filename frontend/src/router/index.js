@@ -6,8 +6,7 @@ import AdminDashboard from "../views/Admin/AdminDashboard.vue";
 import AdminTrek from "../views/Admin/AdminTrek.vue";
 import UserDashboard from "../views/User/UserDashboard.vue";
 import StaffDashboard from "../views/Staff/StaffDashboard.vue";
-import History from "../views/User/History.vue";
-import AdminBooking from "../views/Admin/AdminBooking.vue";
+import BookingHistory from "../components/BookingHistory.vue";
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -17,10 +16,9 @@ const router = createRouter({
         { path: '/signup', name: 'signup', component: SignupView },
         { path: '/admin', name: 'admin', component: AdminDashboard},
         { path: '/admin/treks', name: 'admin-treks', component: AdminTrek },
-        { path: '/staff', name: 'staff', component: StaffDashboard },
+        { path: '/staff/:id', name: 'staff', component: StaffDashboard },
         { path: '/user/:id', name: 'user', component: UserDashboard },
-        { path: '/user/:id/history', name: 'history', component: History },
-        { path: '/admin/bookings', name: 'admin-bookings', component: AdminBooking },
+        { path: '/bookings', name: 'bookings', component: BookingHistory },
     ]
 });
 
@@ -33,12 +31,6 @@ router.beforeEach((to, from, next) => {
         localStorage.clear()
         return next('/login')
     }
-
-    if (to.name === 'history') {
-        if (!token) return next('/login')
-        if (String(userId) !== String(to.params.id)) return next('/login')
-    }
-
     next()
 })
 

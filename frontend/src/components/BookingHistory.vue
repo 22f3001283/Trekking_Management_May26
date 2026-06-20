@@ -1,16 +1,20 @@
 <template>
-    <AdminNavbar/>
+    <AdminNavbar v-if="role === 'admin'" />
+    <StaffNavbar v-else-if="role === 'staff'" />
+    <UserNavbar v-else-if="role === 'user'" />
+
     <div class="admin-bookings" style="margin-top: 40px;">
 
         <!-- ── Page header ── -->
         <div class="page-header">
         <div>
-            <h2 class="page-title">All Bookings</h2>
-            <p class="page-sub">Complete booking history across every trek</p>
+            <button v-if="backPath" class="btn btn-outline-secondary btn-sm mb-2" @click="$router.push(backPath)">← Back to Dashboard</button>
+            <h2 class="page-title">{{ pageTitle }}</h2>
+            <p class="page-sub">{{ pageSub }}</p>
         </div>
         <div class="header-stats">
             <div class="stat-chip">
-            <span class="stat-num">{{ bookings.length }}</span>
+            <span class="stat-num">{{ trekScopedBookings.length }}</span>
             <span class="stat-label">Total</span>
             </div>
             <div class="stat-chip booked">
@@ -51,7 +55,7 @@
             <option value="">All Payments</option>
             <option value="Pending">Pending</option>
             <option value="Paid">Paid</option>
-            <option value="Failed">Failed</option>
+            <option value="Refund">Refund</option>
             </select>
             <button class="refresh-btn" @click="fetchBookings" :disabled="loading">
             <span v-if="loading" class="spinner-border spinner-border-sm"></span>
@@ -125,7 +129,7 @@
                 <td @click.stop>
                 <button class="action-btn view-btn" @click="openDetail(b)" title="View details">👁 View</button>
                 <button
-                    v-if="b.status === 'Booked'"
+                    v-if="b.status === 'Booked' && canCancel(b)"
                     class="action-btn cancel-btn"
                     @click="cancelBooking(b)"
                     title="Cancel booking"
@@ -215,7 +219,7 @@
 
             <div class="modal-footer-bar">
             <button
-                v-if="selectedBooking.status === 'Booked'"
+                v-if="selectedBooking.status === 'Booked' && canCancel(selectedBooking)"
                 class="btn btn-danger btn-sm"
                 @click="cancelBooking(selectedBooking); closeDetail()"
             >Cancel Booking</button>
@@ -230,18 +234,20 @@
 
 <script>
 import axios from 'axios'
-import AdminNavbar from '../../components/AdminNavbar.vue';
-
-const BASE = 'http://127.0.0.1:5000'
+import AdminNavbar from './AdminNavbar.vue';
+import UserNavbar from './UserNavbar.vue';
+import StaffNavbar from './StaffNavbar.vue'; 
 
 export default {
-  name: 'AdminBookings',
-  components: { AdminNavbar },
+  name: 'BookingHistory',
+  components: { AdminNavbar, UserNavbar, StaffNavbar },
   data() {
     return {
       bookings: [],
       users: [],
       treks: [],
+      role: localStorage.getItem('role'),
+      currentUserId: parseInt(localStorage.getItem('user_id')),      
       loading: false,
       error: '',
 
@@ -262,9 +268,15 @@ export default {
   },
 
   computed: {
+    trekScopedBookings() {
+      const trekFilter = this.$route.query.trek_id
+      return trekFilter
+        ? this.bookings.filter(b => String(b.trek_id) === String(trekFilter))
+        : this.bookings
+    },
     filtered() {
       const q = this.search.toLowerCase()
-      return this.bookings
+      return this.trekScopedBookings
         .filter(b => {
           const matchSearch =
             !q ||
@@ -295,6 +307,28 @@ export default {
       const start = (this.page - 1) * this.perPage
       return this.filtered.slice(start, start + this.perPage)
     },
+
+    pageTitle() {
+      if (this.role === 'admin') return 'All Bookings'
+      if (this.role === 'staff') {
+        const trekFilter = this.$route.query.trek_id
+        const trek = trekFilter ? this.treks.find(t => String(t.trek_id) === String(trekFilter)) : null
+        return trek ? `Bookings for ${trek.trek_name}` : 'Bookings for Your Treks'
+      }
+      return 'My Bookings'
+    },
+
+    pageSub() {
+      if (this.role === 'admin') return 'Complete booking history across every trek'
+      if (this.role === 'staff') return 'Bookings made for treks assigned to you'
+      return 'Your trek booking history'
+    },
+
+    backPath() {
+      if (this.role === 'staff') return `/staff/${this.currentUserId}`
+      if (this.role === 'user') return `/user/${this.currentUserId}`
+      return null
+    },
   },
 
   methods: {
@@ -306,11 +340,12 @@ export default {
     async fetchBookings() {
       this.loading = true
       this.error   = ''
-      try {
+      const userPromise = this.role === 'user' ? Promise.resolve({ data: [] }) : axios.get(`http://127.0.0.1:5000/users`, { headers: this.authHeader() })
+        try {
         const [bRes, uRes, tRes] = await Promise.all([
-          axios.get(`${BASE}/bookings`,  { headers: this.authHeader() }),
-          axios.get(`${BASE}/users`,     { headers: this.authHeader() }),
-          axios.get(`${BASE}/treks`,     { headers: this.authHeader() }),
+          axios.get(`http://127.0.0.1:5000/bookings`,  { headers: this.authHeader() }),
+          userPromise,
+          axios.get(`http://127.0.0.1:5000/treks`,     { headers: this.authHeader() }),
         ])
         this.bookings = bRes.data
         this.users    = uRes.data
@@ -327,7 +362,7 @@ export default {
       this.detailParticipants = []
       this.detailLoading      = true
       try {
-        const res = await axios.get(`${BASE}/bookings/${booking.booking_id}`, {
+        const res = await axios.get(`http://127.0.0.1:5000/bookings/${booking.booking_id}`, {
           headers: this.authHeader()
         })
         this.detailParticipants = res.data.participants || []
@@ -346,7 +381,7 @@ export default {
     async cancelBooking(booking) {
       if (!confirm(`Cancel Booking #${booking.booking_id}? This will restore trek slots.`)) return
       try {
-        await axios.delete(`${BASE}/bookings/${booking.booking_id}`, {
+        await axios.delete(`http://127.0.0.1:5000/bookings/${booking.booking_id}`, {
           headers: this.authHeader()
         })
         await this.fetchBookings()
@@ -355,7 +390,12 @@ export default {
       }
     },
 
+    canCancel(booking) {
+      return this.role === 'admin' || (this.role === 'user' && booking.user_id === this.currentUserId)
+    },
+
     getUserName(userId) {
+      if (this.role === 'user') return 'You'
       const u = this.users.find(u => u.user_id === userId)
       return u ? u.username : `User #${userId}`
     },
@@ -366,7 +406,7 @@ export default {
     },
 
     countByStatus(status) {
-      return this.bookings.filter(b => b.status === status).length
+      return this.trekScopedBookings.filter(b => b.status === status).length
     },
 
     formatDate(iso) {
@@ -399,7 +439,7 @@ export default {
       return {
         'Paid':    'pay-paid',
         'Pending': 'pay-pending',
-        'Failed':  'pay-failed',
+        'Refund':  'pay-refund',
       }[status] || ''
     },
 
@@ -654,7 +694,7 @@ export default {
 .status-completed { background: #dcfce7; color: #15803d; }
 .pay-paid    { background: #dcfce7; color: #15803d; }
 .pay-pending { background: #fef9c3; color: #854d0e; }
-.pay-failed  { background: #fee2e2; color: #b91c1c; }
+.pay-refund  { background: #dbeafe; color: #1d4ed8; }
 
 /* ── Action buttons ── */
 .action-btn {

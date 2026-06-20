@@ -538,6 +538,7 @@ class UserApprovalResource(Resource):
 
 class UsersListResource(Resource):
     @jwt_required()
+    @role_required([UserRole.ADMIN, UserRole.STAFF])
     def get(self):
         users = User.query.all()
         return jsonify([user.serialize() for user in users])
