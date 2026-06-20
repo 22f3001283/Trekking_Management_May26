@@ -26,7 +26,7 @@
             <a class="nav-link" href="#staff">Staff</a>
           </li>
           <li class="nav-item mb-2">
-            <a class="nav-link" href="#bookings">Bookings</a>
+            <a class="nav-link" @click="() => $router.push('/admin/bookings')">Bookings</a>
           </li>
           <li class="nav-item mb-2">
             <a class="nav-link" href="#users">Users</a>

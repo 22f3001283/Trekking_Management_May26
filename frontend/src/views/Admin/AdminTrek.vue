@@ -19,7 +19,6 @@
                     <option value="difficulty">Difficulty</option>
                     <option value="status">Status</option>
                     <option value="price">Price</option>
-                    <option value="average_rating">Rating</option>
                     <option value="available_slots">Available Slots</option>
                     <option value="assigned_staff_name">Guide</option>
                 </select>
@@ -37,7 +36,6 @@
                         <option value="price_asc">Price: Low to High</option>
                         <option value="price_desc">Price: High to Low</option>
                         <option value="duration">Duration</option>
-                        <option value="rating">Rating</option>
                     </select>
                 </div>
             </div>
@@ -126,7 +124,6 @@
                             <strong>Available Slots:</strong> {{ trek.available_slots }}<br>
                             <strong>Price:</strong> ₹{{ trek.price }}/person<br>
                             <strong>Status:</strong> {{ trek.status }}<br>
-                            <strong>Rating:</strong> {{ trek.average_rating ? trek.average_rating + '/5' : 'No ratings' }}
                         </p>
                         <div class="d-flex gap-2">
                             <button class="btn btn-sm text-white" @click="handleViewClick(trek)" data-bs-toggle="modal" data-bs-target="#trekModal" style="background-color: #9e52eb;">View</button>
@@ -153,6 +150,7 @@
                 <div class="modal-body">
                     <!-- <Trek :mode="currentMode" :trek="currentTrek" @submit="handleTrekSubmit" @cancel="handleCancel" /> -->
                     <Trek 
+                        ref="trekFormRef"
                         :key="currentMode + (currentTrek?.trek_id || 'new')"
                         :mode="currentMode" 
                         :trek="currentTrek" 
@@ -219,7 +217,6 @@ export default {
             if (this.sortBy === 'price_asc') result = [...result].sort((a, b) => a.price - b.price)
             else if (this.sortBy === 'price_desc') result = [...result].sort((a, b) => b.price - a.price)
             else if (this.sortBy === 'duration') result = [...result].sort((a, b) => a.duration_days - b.duration_days)
-            else if (this.sortBy === 'rating') result = [...result].sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0))
 
             return result
         }
@@ -267,6 +264,7 @@ export default {
                     })
                     alert(response.data.msg)
                     await this.fetchTreks()
+                    this.$refs.trekFormRef.resetForm() 
                     // Close modal
                     const modal = bootstrap.Modal.getInstance(document.getElementById('trekModal'))
                     modal.hide()
@@ -279,6 +277,7 @@ export default {
                     })
                     alert(response.data.msg)
                     await this.fetchTreks()
+                    this.$refs.trekFormRef.resetForm() 
                     const modal = bootstrap.Modal.getInstance(document.getElementById('trekModal'))
                     modal.hide()
                 }
@@ -302,6 +301,7 @@ export default {
             }
         },
         handleCancel() {
+            this.$refs.trekFormRef.resetForm() 
             const modal = bootstrap.Modal.getInstance(document.getElementById('trekModal'))
             modal.hide()
         },

@@ -27,6 +27,7 @@ export default {
         async login() {
             try {
                 const resp = await axios.post("http://127.0.0.1:5000/login", this.formdata)
+                localStorage.clear()  
                 localStorage.setItem('token', resp.data.token)
                 localStorage.setItem('user_id', resp.data.user_id)
                 localStorage.setItem('role', resp.data.role)

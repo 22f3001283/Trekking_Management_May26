@@ -9,17 +9,18 @@
 
             <div class="col-md-6">
                 <label for="trek_name" class="form-label">Trek Name</label>
-                <input v-model="form.trek_name" :disabled="isView" type="text" class="form-control" id="trek_name" required>
+                <input v-model="form.trek_name" :disabled="isView || isStatusLocked" type="text" class="form-control" id="trek_name" required>
             </div>
 
             <div class="col-md-6">
                 <label for="location" class="form-label">Location</label>
-                <input v-model="form.location" :disabled="isView" type="text" class="form-control" id="location" required>
+                <input v-model="form.location" :disabled="isView || isStatusLocked" type="text" class="form-control" id="location" >
             </div>
 
             <div class="col-md-4">
                 <label for="difficulty" class="form-label">Difficulty</label>
-                <select v-model="form.difficulty" :disabled="isView" id="difficulty" class="form-select" required>
+                <select v-model="form.difficulty" :disabled="isView || isStatusLocked" id="difficulty" class="form-select" >
+                    <option value="" disabled>-- Select Difficulty --</option>
                     <option value="Easy">Easy</option>
                     <option value="Moderate">Moderate</option>
                     <option value="Hard">Hard</option>
@@ -33,17 +34,17 @@
 
             <div class="col-md-4">
                 <label for="available_slots" class="form-label">Available Slots</label>
-                <input v-model.number="form.available_slots" :disabled="isView" type="number" min="0" class="form-control" id="available_slots" required>
+                <input v-model.number="form.available_slots" :disabled="isView || isStatusLocked" type="number" min="0" class="form-control" id="available_slots" >
             </div>
 
             <div class="col-md-4">
                 <label for="price" class="form-label">Price (per person)</label>
-                <input v-model.number="form.price" :disabled="isView" type="number" step="0.01" min="0" class="form-control" id="price" required>
+                <input v-model.number="form.price" :disabled="isView || isStatusLocked" type="number" step="0.01" min="0" class="form-control" id="price" >
             </div>
 
             <div class="col-md-4">
                 <label for="assigned_staff_id" class="form-label">Assign Staff</label>
-                <select v-model.number="form.assigned_staff_id" :disabled="isView" id="assigned_staff_id" class="form-select" required>
+                <select v-model.number="form.assigned_staff_id" :disabled="isView || isStatusLocked" id="assigned_staff_id" class="form-select" >
                     <option value="">-- Select Staff --</option>
                     <option v-for="staff in availableStaff" :key="staff.user_id" :value="staff.user_id">
                         {{ staff.user_id }} - {{ staff.username }}
@@ -53,7 +54,7 @@
 
             <div class="col-md-4">
                 <label for="status" class="form-label">Status</label>
-                <select v-model="form.status" :disabled="isView" id="status" class="form-select">
+                <select v-model="form.status" :disabled="isView || isStatusLocked" id="status" class="form-select">
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
                     <option value="Open">Open</option>
@@ -61,16 +62,19 @@
                     <option value="Completed">Completed</option>
                     <option value="Cancelled">Cancelled</option>
                 </select>
+                <small v-if="isStatusLocked" class="text-danger d-block mt-1">
+                    This trek is {{ trek.status }} and can no longer be edited.
+                </small>
             </div>
 
             <div class="col-md-6">
                 <label for="start_date" class="form-label">Start Date</label>
-                <input v-model="form.start_date" :disabled="isView" type="date" class="form-control" id="start_date" required :min="todayString">
+                <input v-model="form.start_date" :disabled="isView || isStatusLocked" type="date" class="form-control" id="start_date"  :min="todayString">
             </div>
 
             <div class="col-md-6">
                 <label for="end_date" class="form-label">End Date</label>
-                <input v-model="form.end_date" :disabled="isView" type="date" class="form-control" id="end_date" required :min="endDateMin">
+                <input v-model="form.end_date" :disabled="isView || isStatusLocked" type="date" class="form-control" id="end_date"  :min="endDateMin">
             </div>
 
             <div class="col-md-6">
@@ -84,7 +88,7 @@
                     >
                         <img :src="img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px;">
                         <button 
-                            v-if="!isView"
+                            v-if="!isView && !isStatusLocked"
                             type="button" 
                             @click="removeImage(index)"
                             style="position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: red; color: white; border: none; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
@@ -93,7 +97,7 @@
                 </div>
 
                 <input 
-                    v-if="!isView"
+                    v-if="!isView && !isStatusLocked"
                     class="form-control" 
                     type="file" 
                     ref="fileInput" 
@@ -101,14 +105,9 @@
                     @change="handleFileChange"
                 >
             </div>
-            
-            <div class="col-12">
-                <p v-if="trek && trek.average_rating">Average rating: {{ trek.average_rating }}</p>
-                <p v-else-if="trek">No ratings</p>
-            </div>
 
             <div class="col-12 text-center mt-3">
-                <button v-if="!isView" type="submit" class="btn btn-primary me-2" style="background-color: #9e52eb;">{{ mode==='create' ? 'Create Trek' : 'Save Changes' }}</button>
+                <button v-if="!isView && !isStatusLocked" type="submit" class="btn btn-primary me-2" style="background-color: #9e52eb;">{{ mode==='create' ? 'Create Trek' : 'Save Changes' }}</button>
                 <button type="button" class="btn btn-secondary" @click="handleCancel" style="background-color: #818285;">{{ isView ? 'Close' : 'Cancel' }}</button>
             </div>
         </form>
@@ -129,9 +128,9 @@ export default {
             form: {
                 trek_name: '',
                 location: '',
-                difficulty: 'Easy',
-                available_slots: 0,
-                price: 0.0,
+                difficulty: '',
+                available_slots: null,
+                price: null,
                 assigned_staff_id: null,
                 status: 'Pending',
                 start_date: '',
@@ -140,11 +139,14 @@ export default {
             availableStaff: [],
             images: [],
             isSubmitting: false,
-            imagePreviews: []
+            imagePreviews: [],
         }
     },
     computed: {
         isView() { return this.mode === 'view' },
+        isStatusLocked() {
+            return this.trek && (this.trek.status === 'Completed' || this.trek.status === 'Cancelled')
+        },
         todayString() {
             const today = new Date()
             const offset = today.getTimezoneOffset()
@@ -166,21 +168,43 @@ export default {
         trek: {
             immediate: true,
             handler(t) {
-                if (!t) return
+                if (!t) return 
                 this.form.trek_name = t.trek_name || ''
-                this.form.location = t.location || ''
-                this.form.difficulty = t.difficulty || 'Easy'
-                this.form.available_slots = t.available_slots || 0
-                this.form.price = t.price || 0.0
+                this.form.location = t.location ?? ''
+                this.form.difficulty = t.difficulty ?? ''
+                this.form.available_slots = t.available_slots ?? null
+                this.form.price = t.price ?? null
                 this.form.assigned_staff_id = t.assigned_staff_id ? parseInt(t.assigned_staff_id) : null
                 this.form.status = t.status || 'Pending'
                 this.form.start_date = t.start_date ? t.start_date.slice(0,10) : ''
                 this.form.end_date = t.end_date ? t.end_date.slice(0,10) : ''
                 this.imagePreviews = (t.images || []).filter(img => img.startsWith('data:'))
+            },
+        },
+        'form.status'(newStatus, oldStatus) {
+            if ((newStatus === 'Completed' || newStatus === 'Cancelled') && newStatus !== oldStatus) {
+                alert(`Warning: Setting this trek's status to "${newStatus}" cannot be undone once saved.`)
             }
-        }
+        }        
     },
     methods: {
+        resetForm() {
+            this.form = {
+                trek_name: '',
+                location: '',
+                difficulty: '',
+                available_slots: null,
+                price: null,
+                assigned_staff_id: null,
+                status: 'Pending',
+                start_date: '',
+                end_date: ''
+            }
+            this.imagePreviews = []
+            if (this.$refs.fileInput) {
+                this.$refs.fileInput.value = null
+            }
+        },
         async fetchStaff() {
             try {
                 const token = localStorage.getItem('token')
@@ -195,9 +219,9 @@ export default {
 
         async handleSubmit() {
             console.log("handleSubmit called", new Date().toISOString())
-            if (this.isSubmitting) return   // ← prevents double fire
+            if (this.isSubmitting) return   // ← prevents double submit
             this.isSubmitting = true
-
+            
             const today = new Date()
             today.setHours(0, 0, 0, 0)
             const startDate = new Date(this.form.start_date)
@@ -205,20 +229,14 @@ export default {
             const endDate = new Date(this.form.end_date)
             endDate.setHours(0, 0, 0, 0)
 
-            if (startDate < today) {
+            if (this.form.start_date && startDate < today) {
                 alert('Start date cannot be before today')
                 this.isSubmitting = false
                 return
             }
 
-            if (endDate < startDate) {
+            if (this.form.start_date && this.form.end_date && endDate < startDate) {
                 alert('End date cannot be before start date')
-                this.isSubmitting = false
-                return
-            }
-
-            if (!this.form.assigned_staff_id) {
-                alert('Please select a staff member')
                 this.isSubmitting = false
                 return
             }

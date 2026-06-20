@@ -4,7 +4,7 @@
       <a class="navbar-brand" href="#">Dashboard</a>
       <div class="d-flex gap-3 align-items-center">
         <div class="icon-wrap">
-          <button class="icon-btn">
+          <button class="icon-btn" @click="goToHistory">
             <img src="../assets/history.png" alt="History" class="nav-icon" />
           </button>
           <span class="tooltip-label">History</span>
@@ -29,8 +29,14 @@
 <script>
 export default {
   methods: {
+    goToHistory() {                                        
+      const userId = localStorage.getItem('user_id')
+      this.$router.push(`/user/${userId}/history`)
+    },
     signOut() {
       localStorage.removeItem('token')
+      localStorage.removeItem('user_id')
+      localStorage.removeItem('role')
       this.$router.push('/login')
     }
   }

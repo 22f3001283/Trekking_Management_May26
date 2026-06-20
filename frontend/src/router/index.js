@@ -6,6 +6,8 @@ import AdminDashboard from "../views/Admin/AdminDashboard.vue";
 import AdminTrek from "../views/Admin/AdminTrek.vue";
 import UserDashboard from "../views/User/UserDashboard.vue";
 import StaffDashboard from "../views/Staff/StaffDashboard.vue";
+import History from "../views/User/History.vue";
+import AdminBooking from "../views/Admin/AdminBooking.vue";
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -17,7 +19,27 @@ const router = createRouter({
         { path: '/admin/treks', name: 'admin-treks', component: AdminTrek },
         { path: '/staff', name: 'staff', component: StaffDashboard },
         { path: '/user/:id', name: 'user', component: UserDashboard },
+        { path: '/user/:id/history', name: 'history', component: History },
+        { path: '/admin/bookings', name: 'admin-bookings', component: AdminBooking },
     ]
 });
+
+router.beforeEach((to, from, next) => {
+    const token = localStorage.getItem('token')
+    const userId = localStorage.getItem('user_id')
+    const role = localStorage.getItem('role')
+
+    if (to.meta.requiresRole && to.meta.requiresRole !== role) {
+        localStorage.clear()
+        return next('/login')
+    }
+
+    if (to.name === 'history') {
+        if (!token) return next('/login')
+        if (String(userId) !== String(to.params.id)) return next('/login')
+    }
+
+    next()
+})
 
 export default router;
