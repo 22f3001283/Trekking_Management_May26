@@ -10,7 +10,7 @@
           <span class="tooltip-label">History</span>
         </div>
         <div class="icon-wrap">
-          <button class="icon-btn">
+          <button class="icon-btn" @click="goToProfile">
             <img src="../assets/profile.png" alt="Profile" class="nav-icon" />
           </button>
           <span class="tooltip-label">Profile</span>
@@ -29,8 +29,11 @@
 <script>
 export default {
   methods: {
-    goToHistory() {                                    
+    goToHistory() {
       this.$router.push('/bookings')
+    },
+    goToProfile() {
+      this.$router.push('/profile')
     },
     signOut() {
       localStorage.removeItem('token')

@@ -583,6 +583,61 @@ class StaffCreateResource(Resource):
         db.session.commit()
         return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
+
+#-------------------------------------------------------------User Profile----------------------------------------------------------------------
+
+class UserProfileResource(Resource):
+    """
+    GET /user/profile  — fetch the logged-in user's own profile
+    PUT /user/profile  — update the logged-in user's own profile
+    """
+ 
+    @jwt_required()
+    def get(self):
+        current_user = get_current_user()
+        if not current_user:
+            return {"msg": "User not found"}, 404
+        return current_user.serialize(), 200
+ 
+    @jwt_required()
+    def put(self):
+        current_user = get_current_user()
+        if not current_user:
+            return {"msg": "User not found"}, 404
+ 
+        data = request.get_json() or {}
+ 
+        new_username = data.get("username")
+        new_email = data.get("email")
+ 
+        # Uniqueness checks only if the value is actually changing
+        if new_username and new_username != current_user.username:
+            if User.query.filter_by(username=new_username).first():
+                return {"msg": "Username already exists"}, 409
+            current_user.username = new_username
+ 
+        if new_email and new_email != current_user.email:
+            if User.query.filter_by(email=new_email).first():
+                return {"msg": "Email already exists"}, 409
+            current_user.email = new_email
+ 
+        if "contact" in data:
+            current_user.contact = data["contact"] or None
+ 
+        # Optional password change — only if both fields are supplied
+        new_password = data.get("new_password")
+        if new_password:
+            current_password = data.get("current_password")
+            if not current_password or not check_password_hash(current_user.password_hash, current_password):
+                return {"msg": "Current password is incorrect"}, 401
+            current_user.password_hash = generate_password_hash(new_password)
+ 
+        db.session.commit()
+        return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
+ 
+
+
+
 api.add_resource(Hello,'/')
 api.add_resource(LoginResource,'/login')
 api.add_resource(SignupResource,'/signup')
@@ -597,6 +652,7 @@ api.add_resource(UserBookingSummaryResource, '/user/bookings')
 api.add_resource(BookingListResource, '/bookings')
 api.add_resource(BookingResource, '/bookings/<int:booking_id>')
 api.add_resource(StaffCreateResource, '/staff')
+api.add_resource(UserProfileResource, '/user/profile')
 
 if __name__=="__main__":
     app.run(debug=True)
