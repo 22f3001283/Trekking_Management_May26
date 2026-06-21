@@ -549,6 +549,39 @@ class UserTrekListResource(Resource) :
     def get(self):
         treks = Trek.query. filter(Trek.status.in_([TrekStatus. OPEN, TrekStatus.APPROVED]) ).all()
         return [trek.serialize() for trek in treks]
+    
+# --------------------------------------------------------Admin Staff----------------------------------------------------------------------------
+
+class StaffCreateResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    def post(self):
+        data = request.get_json() or {}
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        contact = data.get('contact')
+
+        if not username or not email or not password:
+            return {"msg": "username, email, and password are required"}, 400
+
+        if User.query.filter_by(email=email).first():
+            return {"msg": "Email already exists"}, 409
+        if User.query.filter_by(username=username).first():
+            return {"msg": "Username already exists"}, 409
+
+        new_staff = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role=UserRole.STAFF,
+            contact=contact,
+            status="active",
+            created_at=datetime.now()
+        )
+        db.session.add(new_staff)
+        db.session.commit()
+        return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
 api.add_resource(Hello,'/')
 api.add_resource(LoginResource,'/login')
@@ -563,6 +596,7 @@ api.add_resource(TrekStaffUpdateResource, '/treks/<int:trek_id>/staff')
 api.add_resource(UserBookingSummaryResource, '/user/bookings')
 api.add_resource(BookingListResource, '/bookings')
 api.add_resource(BookingResource, '/bookings/<int:booking_id>')
+api.add_resource(StaffCreateResource, '/staff')
 
 if __name__=="__main__":
     app.run(debug=True)
