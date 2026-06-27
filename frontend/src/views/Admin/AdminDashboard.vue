@@ -258,7 +258,7 @@ export default {
             }
         },
         pendingUsers() {
-            return this.allUsers.filter(u => u.status === 'inactive' || u.status === 'blacklisted')
+            return this.allUsers.filter(u => u.status === 'blacklisted')
         },
         pendingTreks() {
             return this.allTreks.filter(t => t.status === 'Pending')
@@ -334,7 +334,6 @@ export default {
         statusBadgeClass(status) {
             return {
                 active:      'bg-success-subtle text-success-emphasis',
-                inactive:    'bg-warning-subtle text-warning-emphasis',
                 blacklisted: 'bg-danger-subtle text-danger-emphasis',
             }[status] || 'bg-light text-dark'
         },

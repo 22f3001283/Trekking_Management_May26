@@ -1,12 +1,29 @@
+from collections import defaultdict
+import csv
+from flask import send_from_directory   
+from celery.result import AsyncResult
 from flask import Flask, jsonify, make_response, request
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from flask_restful import Resource, Api
 # from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS, cross_origin
-from models import User, init_db, db, Trek, TrekStatus, UserRole, Booking, Participant, BookingStatus, PaymentStatus
+from models import User, init_db, db, Trek, TrekStatus, UserRole, UserStatus, Booking, Participant, BookingStatus, PaymentStatus
 import functools
+import os
+from flask import Flask, request
+from flask_restful import Api, Resource
+from flask_mail import Mail, Message
+from flask_caching import Cache
+from celery import Celery
+from dotenv import load_dotenv
+from celery.schedules import crontab
+from calendar import monthrange
+from sqlalchemy import extract
+
+# Load .env
+load_dotenv()
 
 app=Flask(__name__)
 app.config['CORS_HEADERS'] = 'Content-Type, Authorization'
@@ -20,6 +37,61 @@ init_db(app)
 
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
+# ============================
+# Flask-Mail Configuration
+# ============================
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USER')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASS')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USER')
+mail = Mail(app)
+
+# ============================
+# Flask-Caching with Redis
+# ============================
+app.config['CACHE_TYPE'] = 'RedisCache'
+app.config['CACHE_REDIS_HOST'] = 'localhost'
+app.config['CACHE_REDIS_PORT'] = 6379
+app.config['CACHE_REDIS_DB'] = 1
+app.config['CACHE_REDIS_URL'] = 'redis://localhost:6379/1'
+app.config['CACHE_DEFAULT_TIMEOUT'] = 60
+cache = Cache(app)
+
+# ============================
+# Celery Configuration
+# ============================
+app.config['broker_url'] = os.getenv('BROKER_URL', 'redis://localhost:6379/0')
+app.config['result_backend'] = os.getenv('RESULT_BACKEND', 'redis://localhost:6379/0')
+
+celery = Celery(app.name, broker=app.config['broker_url'], backend=app.config['result_backend'])
+celery.conf.broker_connection_retry_on_startup = True
+
+# ============================
+# Celery Context Setup
+# ============================
+def init_celery(flask_app):
+    celery_app = Celery(
+        flask_app.import_name,
+        broker=flask_app.config['broker_url'],
+        backend=flask_app.config['result_backend']
+    )
+    celery_app.conf.update(flask_app.config)
+
+    class ContextTask(celery_app.Task):
+        def __call__(self, *args, **kwargs):
+            with flask_app.app_context():
+                return super().__call__(*args, **kwargs)
+
+    celery_app.Task = ContextTask
+    return celery_app
+
+celery = init_celery(app)
+
+#---------------------------------------------------Export Path--------------------------------------------------------------------------------
+EXPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
+os.makedirs(EXPORT_DIR, exist_ok=True)
 ###################################  decorator  ############################################################################# #
 
 def get_current_user():
@@ -108,7 +180,7 @@ class SignupResource(Resource):
         password = data['password']
         role = "user"
         contact = data.get('contact', None)
-        status = "inactive"
+        status = "active"
         created_at = datetime.now()          
         if User.query.filter_by(email=email).first():
             response = jsonify({'msg': 'Email already exists, Please login'})
@@ -166,8 +238,10 @@ class TrekListResource(Resource):
             else:
                 new_trek.status = TrekStatus.PENDING
                 msg = "Some fields are missing, so this trek was saved as Pending. Fill in all fields to mark it Open/Approved."
+        elif requested_status == TrekStatus.PENDING:
+            new_trek.status = TrekStatus.PENDING
         else:
-            new_trek.status = requested_status
+            return {"msg": f"Invalid status '{requested_status}'"}, 400
 
         db.session.add(new_trek)
         db.session.commit()
@@ -215,6 +289,7 @@ class TrekResource(Resource):
             trek.images = data["images"]
 
         msg = "Trek updated successfully"
+        cancelled_pending = []
 
         if requested_status is not None:
             if requested_status in [TrekStatus.OPEN, TrekStatus.APPROVED]:
@@ -223,15 +298,22 @@ class TrekResource(Resource):
                 else:
                     trek.status = TrekStatus.PENDING
                     msg = "Some fields are missing, so this trek was saved as Pending. Fill in all fields to mark it Open/Approved."
-            else:
+            elif requested_status in [TrekStatus.CLOSED, TrekStatus.COMPLETED, TrekStatus.CANCELLED, TrekStatus.PENDING]:
                 trek.status = requested_status
-
-            if requested_status == TrekStatus.COMPLETED:
-                bookings = Booking.query.filter_by(trek_id=trek_id).filter(Booking.status == BookingStatus.BOOKED).all()
-                for booking in bookings:
-                    booking.status = BookingStatus.COMPLETED
+                if requested_status == TrekStatus.CLOSED:
+                    cancelled_pending = cancel_pending_bookings_for_trek(trek)
+                if requested_status == TrekStatus.COMPLETED:
+                    bookings = Booking.query.filter_by(trek_id=trek_id).filter(Booking.status == BookingStatus.BOOKED).all()
+                    for booking in bookings:
+                        booking.status = BookingStatus.COMPLETED
+            else:
+                return {"msg": f"Invalid status '{requested_status}'"}, 400
 
         db.session.commit()
+
+        for booking in cancelled_pending:
+            send_pending_cancelled_email.delay(booking.booking_id)
+
         return {"msg": msg, "trek": trek.serialize()}
 
 # ----------------------------------------------------------------Staff-------------------------------------------------------------------------
@@ -273,7 +355,8 @@ class TrekStaffUpdateResource(Resource):
                 return {"msg": "available_slots must be an integer"}, 400
 
         msg = "Trek updated by staff successfully"
-
+        
+        cancelled_pending = []
         if "status" in data:
             if data["status"] not in [TrekStatus.OPEN, TrekStatus.CLOSED]:
                 return {"msg": "Staff may only set status to Open or Closed"}, 400
@@ -286,6 +369,8 @@ class TrekStaffUpdateResource(Resource):
                 msg = "Some fields are missing, so this trek was saved as Pending. Fill in all fields to mark it Open."
             else:
                 trek.status = data["status"]
+                if data["status"] == TrekStatus.CLOSED:
+                    cancelled_pending = cancel_pending_bookings_for_trek(trek)
             updated = True
 
         if data.get("complete") is True:
@@ -298,7 +383,11 @@ class TrekStaffUpdateResource(Resource):
         if not updated:
             return {"msg": "No valid staff-managed trek fields provided"}, 400
 
-        db.session.commit()  
+        db.session.commit()
+
+        for booking in cancelled_pending:
+            send_pending_cancelled_email.delay(booking.booking_id)
+
         return {"msg": msg, "trek": trek.serialize()}
 
 class UserBookingSummaryResource(Resource):
@@ -507,13 +596,13 @@ class BookingResource(Resource):
 # User Approval (Admin only)
 class UserApprovalResource(Resource):
     @jwt_required()
-    @role_required(["admin"])
+    @role_required([UserRole.ADMIN])
     def get(self):
-        users = User.query.filter(User.status.in_(["inactive", "blacklisted"])).all()
+        users = User.query.filter(User.status.in_(["blacklisted"])).all()
         return jsonify([user.serialize() for user in users])
 
     @jwt_required()
-    @role_required(["admin"])
+    @role_required([UserRole.ADMIN])
     def put(self, user_id):
         user = User.query.get(user_id)
         data = request.get_json()
@@ -523,6 +612,7 @@ class UserApprovalResource(Resource):
         
         user.status = status
         db.session.commit()
+        send_status_change_notice.delay(user.user_id)
         return jsonify({"msg": "User status changed to "+status+" successfully"})
 
     # @jwt_required()
@@ -635,8 +725,67 @@ class UserProfileResource(Resource):
         db.session.commit()
         return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
  
+#-------------------------------------------Export Booking History------------------------------------------------------------------------------
+class ExportBookingHistoryResource(Resource):
+    @jwt_required()
+    def post(self):
+        current_user = get_current_user()
+        task = export_booking_history_csv.delay(current_user.user_id)
+        return {"task_id": task.id}, 202
 
 
+class ExportStatusResource(Resource):
+    @jwt_required()
+    def get(self, task_id):
+        result = AsyncResult(task_id, app=celery)
+        if result.state == "SUCCESS":
+            return {"status": "SUCCESS", "filename": result.result}, 200
+        if result.state == "FAILURE":
+            return {"status": "FAILURE"}, 500
+        return {"status": result.state}, 200
+
+
+class ExportDownloadResource(Resource):
+    @jwt_required()
+    def get(self, filename):
+        current_user = get_current_user()
+
+        if filename.startswith(f"booking_history_{current_user.user_id}_"):
+            return send_from_directory(EXPORT_DIR, filename, as_attachment=True)
+
+        if filename.startswith("participants_trek_"):
+            try:
+                trek_id = int(filename.split("_")[2])
+            except (IndexError, ValueError):
+                return {"msg": "Invalid filename"}, 400
+            trek = Trek.query.get(trek_id)
+            if not trek:
+                return {"msg": "Trek not found"}, 404
+            if current_user.role == UserRole.ADMIN or (
+                current_user.role == UserRole.STAFF and trek.assigned_staff_id == current_user.user_id
+            ):
+                return send_from_directory(EXPORT_DIR, filename, as_attachment=True)
+            return {"msg": "Unauthorized"}, 403
+
+        return {"msg": "Unauthorized"}, 403
+    
+
+class ExportTrekParticipantsResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.STAFF, UserRole.ADMIN])
+    def post(self, trek_id):
+        current_user = get_current_user()
+        trek = Trek.query.get(trek_id)
+        if not trek:
+            return {"msg": "Trek not found"}, 404
+        if current_user.role == UserRole.STAFF and trek.assigned_staff_id != current_user.user_id:
+            return {"msg": "Unauthorized — this trek is not assigned to you"}, 403
+
+        data = request.get_json() or {}
+        include_cancelled = bool(data.get("include_cancelled", False))
+
+        task = export_trek_participants_csv.delay(trek_id, include_cancelled)
+        return {"task_id": task.id}, 202
 
 api.add_resource(Hello,'/')
 api.add_resource(LoginResource,'/login')
@@ -653,6 +802,471 @@ api.add_resource(BookingListResource, '/bookings')
 api.add_resource(BookingResource, '/bookings/<int:booking_id>')
 api.add_resource(StaffCreateResource, '/staff')
 api.add_resource(UserProfileResource, '/user/profile')
+api.add_resource(ExportBookingHistoryResource, '/export/booking-history')
+api.add_resource(ExportStatusResource, '/export/status/<string:task_id>')
+api.add_resource(ExportDownloadResource, '/export/download/<string:filename>')
+api.add_resource(ExportTrekParticipantsResource, '/export/trek-participants/<int:trek_id>')
+
+
+#-------------------------------Scheduling Daily Reminders-----------------------
+
+@celery.task(name="tasks.send_daily_reminders")
+def send_daily_reminders():
+    with app.app_context():
+        today = date.today()
+        bookings = Booking.query.filter_by(status=BookingStatus.BOOKED).all()
+        upcoming = [b for b in bookings if b.trek and b.trek.start_date and b.trek.start_date >= today]
+
+        if not upcoming:
+            print("[Daily Reminders] No upcoming booked treks.")
+            return "No upcoming booked treks"
+
+        by_user = defaultdict(list)
+        for b in upcoming:
+            by_user[b.user_id].append(b)
+
+        sent = 0
+        for user_id, user_bookings in by_user.items():
+            user = user_bookings[0].user
+            if not user or not user.email:
+                continue
+
+            trek_lines = "\n\n".join(
+                f"- {b.trek.trek_name} ({b.trek.location or 'TBD'})\n"
+                f"  Start Date     : {b.trek.start_date}\n"
+                f"  End Date       : {b.trek.end_date}\n"
+                f"  Difficulty     : {b.trek.difficulty or 'N/A'}\n"
+                f"  Booking Status : {b.status}\n"
+                f"  Payment Status : {b.payment_status}"
+                for b in user_bookings
+            )
+
+            body = (
+                f"Hi {user.username},\n\n"
+                f"Here's a reminder of your upcoming trek(s):\n\n"
+                f"{trek_lines}\n\n"
+                f"Please arrive at the meeting point at least 30 minutes early and carry a valid ID.\n"
+                f"If any Payment Status above shows Pending, please complete payment soon to keep your slot.\n\n"
+                f"If you wish to cancel your booking, please ensure that the cancellation request is made before the registration period closes.\n\n"
+                f"Kindly note that after the registration deadline has passed, cancellations will not be accepted and no refunds will be provided.\n\n"
+                f"- TMA Team"
+            )
+
+            try:
+                mail.send(Message(
+                    subject="Reminder: Your upcoming trek(s) with TMA",
+                    recipients=[user.email],
+                    body=body,
+                ))
+                sent += 1
+            except Exception as e:
+                print(f"[Daily Reminders] Failed to email {user.email}: {e}")
+
+        print(f"[Daily Reminders] Sent {sent} reminder email(s).")
+        return f"Sent {sent} reminder email(s)."
+
+@celery.task(name="tasks.send_close_warning_notice")
+def send_close_warning_notice():
+    with app.app_context():
+        target_date = date.today() + timedelta(days=2)
+        treks = Trek.query.filter(
+            Trek.start_date == target_date,
+            Trek.status != TrekStatus.CLOSED
+        ).all()
+
+        if not treks:
+            print(f"[Close Warning] No open treks starting on {target_date}.")
+            return "No treks to warn about"
+
+        admins = User.query.filter_by(role=UserRole.ADMIN).all()
+        sent = 0
+
+        for trek in treks:
+            recipients = set()
+            if trek.assigned_staff and trek.assigned_staff.email:
+                recipients.add(trek.assigned_staff.email)
+            recipients.update(a.email for a in admins if a.email)
+
+            if not recipients:
+                continue
+
+            body = (
+                f"Hi,\n\n"
+                f"The trek '{trek.trek_name}' starts on {trek.start_date} (2 days from now) "
+                f"and is still '{trek.status}', not Closed.\n\n"
+                f"Please close it manually before then. If it isn't closed, the system will "
+                f"automatically close it at 7:00 AM the day before the trek starts, and any "
+                f"bookings with pending payment will be cancelled at that time.\n\n"
+                f"- TMA System"
+            )
+            try:
+                mail.send(Message(
+                    subject=f"Action needed: please close '{trek.trek_name}' before it starts",
+                    recipients=list(recipients),
+                    body=body,
+                ))
+                sent += 1
+            except Exception as e:
+                print(f"[Close Warning] Failed to email for trek {trek.trek_id}: {e}")
+
+        print(f"[Close Warning] {target_date}: {sent} warning email(s) sent.")
+        return f"{sent} warning email(s) sent."
+    
+@celery.task(name="tasks.send_trek_notice")
+def send_trek_notice():
+    with app.app_context():
+        target_date = date.today() + timedelta(days=1)
+        treks = Trek.query.filter_by(start_date=target_date).all()
+
+        if not treks:
+            print(f"[Trek Notice] No treks starting on {target_date}.")
+            return "No treks starting tomorrow"
+
+        sent, auto_closed, cancelled_total = 0, 0, 0
+
+        # only one admin exists in the system
+        admin = User.query.filter_by(role=UserRole.ADMIN).first()
+
+        for trek in treks:
+
+            # Auto-close only if still Pending/Open/Approved
+            if trek.status in [
+                TrekStatus.PENDING,
+                TrekStatus.APPROVED,
+                TrekStatus.OPEN,
+            ]:
+                trek.status = TrekStatus.CLOSED
+                auto_closed += 1
+
+                cancelled_pending = cancel_pending_bookings_for_trek(trek)
+                db.session.commit()
+
+                cancelled_total += len(cancelled_pending)
+
+                for booking in cancelled_pending:
+                    send_pending_cancelled_email.delay(booking.booking_id)
+
+                # Notify assigned staff + admin that system auto-closed trek
+                recipients = set()
+
+                if trek.assigned_staff and trek.assigned_staff.email:
+                    recipients.add(trek.assigned_staff.email)
+
+                if admin and admin.email:
+                    recipients.add(admin.email)
+
+                if recipients:
+                    body = (
+                        f"Hi,\n\n"
+                        f"The trek '{trek.trek_name}' (starting {trek.start_date}) "
+                        f"was not closed manually, so it has now been automatically CLOSED.\n\n"
+                        f"{len(cancelled_pending)} booking(s) with pending payment "
+                        f"were cancelled as a result.\n\n"
+                        f"- TMA System"
+                    )
+
+                    try:
+                        mail.send(Message(
+                            subject=f"Auto-closed: '{trek.trek_name}'",
+                            recipients=list(recipients),
+                            body=body,
+                        ))
+                    except Exception as e:
+                        print(f"[Trek Notice] Failed to send auto-close email: {e}")
+
+            # Reminder to everyone still Booked
+            bookings = Booking.query.filter_by(
+                trek_id=trek.trek_id,
+                status=BookingStatus.BOOKED
+            ).all()
+
+            for booking in bookings:
+                user = booking.user
+                if not user or not user.email:
+                    continue
+
+                body = (
+                    f"Hi {user.username},\n\n"
+                    f"This is a reminder that your trek '{trek.trek_name}' starts tomorrow.\n\n"
+                    f"Start Date : {trek.start_date}\n"
+                    f"End Date   : {trek.end_date}\n"
+                    f"Location   : {trek.location or 'TBD'}\n\n"
+                    f"Instructions:\n"
+                    f"- Please carry your Aadhar card with you and arrive at sharp 7:00 AM tomorrow to the location.\n"
+                    f"- No refund will be issued if you do not attend.\n\n"
+                    f"- TMA Team"
+                )
+
+                try:
+                    mail.send(Message(
+                        subject=f"Reminder: {trek.trek_name} starts tomorrow!",
+                        recipients=[user.email],
+                        body=body,
+                    ))
+                    sent += 1
+                except Exception as e:
+                    print(f"[Trek Notice] Failed to email {user.email}: {e}")
+
+        print(
+            f"[Trek Notice] {target_date}: "
+            f"{sent} reminder(s), "
+            f"{auto_closed} auto-closed, "
+            f"{cancelled_total} cancelled."
+        )
+
+        return (
+            f"{sent} reminder(s), "
+            f"{auto_closed} auto-closed trek(s), "
+            f"{cancelled_total} cancelled booking(s)."
+        )
+    
+
+@celery.task(name="tasks.send_status_change_notice")
+def send_status_change_notice(user_id):
+    with app.app_context():
+        user = User.query.get(user_id)
+        if not user:
+            return "User not found"
+        
+        if user.status == UserStatus.ACTIVE:
+            body = f"""
+            Hello {user.username},
+
+            We are pleased to inform you that your account status has been updated to Active.
+
+            You can now access all the features and services available on our platform.
+
+            If you have any questions or need assistance, please feel free to contact our support team.
+
+            Thank you for being with us.
+
+            Best regards,
+            The Team
+            """
+
+        else:
+            body = f"""
+            Hello {user.username},
+
+            This is to inform you that your account status has been updated to Blacklisted.
+
+            As a result, your access to certain features or services may be restricted.
+
+            If you believe this has been done in error or would like more information, please contact our support team.
+
+            Thank you for your understanding.
+
+            Best regards,
+            The Team
+            """
+
+        try:
+            mail.send(Message(
+                subject="Important Update Regarding Your Account",
+                recipients=[user.email],   # recipients should be a list
+                body=body,
+            ))
+            print(f"Status update email sent to user {user.user_id}")
+            return "Email sent successfully."
+
+        except Exception as e:
+            print(f"Failed to email user {user.user_id}: {e}")
+            return "Failed to send email."
+    
+#-----------------------------------------------------------------------------------Backend Jobs------------------------------------------------------------------------------------
+def cancel_pending_bookings_for_trek(trek):
+    """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
+    Frees slots immediately; returns affected bookings so emails can be sent after commit."""
+    pending_bookings = Booking.query.filter_by(
+        trek_id=trek.trek_id, status=BookingStatus.BOOKED, payment_status=PaymentStatus.PENDING
+    ).all()
+
+    for booking in pending_bookings:
+        if trek.available_slots is not None:
+            trek.available_slots += booking.num_people
+        booking.status = BookingStatus.CANCELLED
+
+    return pending_bookings
+
+@celery.task(name="tasks.send_pending_cancelled_email")
+def send_pending_cancelled_email(booking_id):
+    with app.app_context():
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return "Booking not found"
+        user, trek = booking.user, booking.trek
+        if not user or not user.email:
+            return "User not found or no email"
+
+        body = (
+            f"Hi {user.username},\n\n"
+            f"Your booking for '{trek.trek_name}' has been automatically CANCELLED "
+            f"because the trek has been closed and your payment was still pending.\n\n"
+            f"Booking ID : {booking.booking_id}\n\n"
+            f"You're welcome to book another available trek.\n\n- TMA Team"
+        )
+        try:
+            mail.send(Message(subject=f"Booking cancelled: {trek.trek_name}",
+                               recipients=[user.email], body=body))
+            return f"Sent to {user.email}"
+        except Exception as e:
+            print(f"[Pending Cancel] Failed to email {user.email}: {e}")
+            return f"Failed: {e}"
+
+@celery.task(name="tasks.generate_monthly_report")
+def generate_monthly_report():
+    with app.app_context():
+        today = date.today()
+        if today.month == 1:
+            report_month, report_year = 12, today.year - 1
+        else:
+            report_month, report_year = today.month , today.year
+
+        month_name = date(report_year, report_month, 1).strftime("%B %Y")
+
+        treks_conducted = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('month', Trek.start_date) == report_month,
+            extract('year', Trek.start_date) == report_year,
+        ).all()
+
+        trek_ids = [t.trek_id for t in treks_conducted]
+        bookings = []
+        if trek_ids:
+            bookings = Booking.query.filter(
+                Booking.trek_id.in_(trek_ids),
+                Booking.status.in_([BookingStatus.BOOKED, BookingStatus.COMPLETED])
+            ).all()
+
+        participant_user_ids = {b.user_id for b in bookings}
+
+        booking_counts = {}
+        for b in bookings:
+            booking_counts[b.trek_id] = booking_counts.get(b.trek_id, 0) + 1
+        top_trek_ids = sorted(booking_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        popular_treks = []
+        for trek_id, count in top_trek_ids:
+            trek = Trek.query.get(trek_id)
+            if trek:
+                popular_treks.append((trek.trek_name, count))
+
+        html_body = _build_report_html(month_name, len(treks_conducted), len(participant_user_ids), popular_treks)
+
+        admins = User.query.filter_by(role=UserRole.ADMIN).all()
+        recipients = [a.email for a in admins if a.email]
+
+        if not recipients:
+            print("[Monthly Report] No admin email found.")
+            return "No admin email found"
+
+        try:
+            mail.send(Message(
+                subject=f"TMA Monthly Activity Report - {month_name}",
+                recipients=recipients,
+                html=html_body,
+            ))
+            print(f"[Monthly Report] Sent for {month_name} to {recipients}")
+            return f"Report sent for {month_name}"
+        except Exception as e:
+            print(f"[Monthly Report] Failed to send: {e}")
+            return f"Failed: {e}"
+
+
+def _build_report_html(month_name, treks_count, users_count, popular_treks):
+    rows = "".join(
+        f"<tr><td>{name}</td><td>{count}</td></tr>" for name, count in popular_treks
+    ) or "<tr><td colspan='2'>No bookings this month</td></tr>"
+
+    return f"""
+    <html>
+      <body style="font-family: Arial, sans-serif;">
+        <h2>TMA Monthly Activity Report — {month_name}</h2>
+        <table style="border-collapse: collapse; margin-bottom: 20px;">
+          <tr><td style="padding:4px 12px;"><b>Treks Conducted</b></td><td style="padding:4px 12px;">{treks_count}</td></tr>
+          <tr><td style="padding:4px 12px;"><b>Users Participated</b></td><td style="padding:4px 12px;">{users_count}</td></tr>
+        </table>
+        <h3>Most Popular Treks</h3>
+        <table border="1" cellpadding="6" style="border-collapse: collapse;">
+          <tr><th>Trek Name</th><th>Bookings</th></tr>
+          {rows}
+        </table>
+      </body>
+    </html>
+    """
+
+@celery.task(name="tasks.export_booking_history_csv")
+def export_booking_history_csv(user_id):
+    with app.app_context():
+        bookings = Booking.query.filter_by(user_id=user_id).all()
+
+        filename = f"booking_history_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filepath = os.path.join(EXPORT_DIR, filename)
+
+        with open(filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["User ID", "Trek Name", "Location", "Booking Status", "Dates"])
+            for b in bookings:
+                writer.writerow([
+                    b.user_id,
+                    b.trek.trek_name if b.trek else "",
+                    b.trek.location if b.trek else "",
+                    b.status,
+                    b.booking_date.strftime("%Y-%m-%d %H:%M:%S") if b.booking_date else "",
+                ])
+
+        return filename
+    
+@celery.task(name="tasks.export_trek_participants_csv")
+def export_trek_participants_csv(trek_id, include_cancelled):
+    with app.app_context():
+        query = Booking.query.filter_by(trek_id=trek_id)
+        if not include_cancelled:
+            query = query.filter(Booking.status != BookingStatus.CANCELLED)
+        bookings = query.all()
+
+        filename = f"participants_trek_{trek_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filepath = os.path.join(EXPORT_DIR, filename)
+
+        with open(filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Participant Name", "DOB", "Aadhar", "Booked By", "Payment Status", "Booking Status"])
+            for b in bookings:
+                booked_by = b.user.username if b.user else ""
+                for p in b.participants.all():
+                    writer.writerow([
+                        p.name,
+                        p.dob.isoformat() if p.dob else "",
+                        p.aadhar,
+                        booked_by,
+                        b.payment_status,
+                        b.status,
+                    ])
+
+        return filename
+    
+
+#-----------------------------------Celery---------------------------------------
+
+celery.conf.timezone = 'Asia/Kolkata'
+celery.conf.beat_schedule = {
+    'daily_reminder': {
+        'task': 'tasks.send_daily_reminders',
+        'schedule': crontab(hour=7, minute=00),
+    },
+    'close_warning_notice': {
+        'task': 'tasks.send_close_warning_notice',
+        'schedule': crontab(hour=6,minute=45),
+    },    
+    'trek_notice':{
+        'task': 'tasks.send_trek_notice',
+        'schedule': crontab(hour=7, minute=5)
+    },
+    'monthly-report': {
+        'task': 'tasks.generate_monthly_report',
+        'schedule': crontab(day_of_month=1, hour=7, minute=15),
+    },
+}
 
 if __name__=="__main__":
     app.run(debug=True)

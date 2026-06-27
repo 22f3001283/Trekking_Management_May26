@@ -18,10 +18,6 @@
                     <div class="fs-5 fw-bold">{{ countByStatus('active') }}</div>
                     <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Active</div>
                 </div>
-                <div class="rounded-3 text-center px-3 py-2 border border-secondary bg-secondary-subtle" style="min-width: 70px;">
-                    <div class="fs-5 fw-bold">{{ countByStatus('inactive') }}</div>
-                    <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Inactive</div>
-                </div>
                 <div class="rounded-3 text-center px-3 py-2 border border-danger bg-danger-subtle" style="min-width: 70px;">
                     <div class="fs-5 fw-bold">{{ countByStatus('blacklisted') }}</div>
                     <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Blacklisted</div>
@@ -44,7 +40,6 @@
             <select v-model="filterStatus" class="form-select form-select-sm w-auto">
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
                 <option value="blacklisted">Blacklisted</option>
             </select>
             <select v-model="sortBy" class="form-select form-select-sm w-auto">
@@ -105,7 +100,6 @@
                             <td @click.stop>
                                 <select class="form-select form-select-sm" :value="staff.status" @change="handleStatusChange(staff, $event.target.value)">
                                     <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
                                     <option value="blacklisted">Blacklisted</option>
                                 </select>
                             </td>                            
@@ -360,7 +354,6 @@ export default {
         statusBadgeClass(status) {
             return {
                 active: 'bg-success-subtle text-success-emphasis',
-                inactive: 'bg-secondary-subtle text-secondary-emphasis',
                 blacklisted: 'bg-danger-subtle text-danger-emphasis',
             }[status] || 'bg-light text-dark'
         },

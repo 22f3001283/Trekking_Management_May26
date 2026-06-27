@@ -4,7 +4,12 @@
     <div class="container-fluid" style="padding-left: 100px; padding-right: 100px; margin-top: 70px;">
 
         <!-- ══════════════════ BOOKED TREKS ══════════════════ -->
-        <h2 class="mb-3">My Booked Treks</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="mb-0">My Booked Treks</h2>
+            <button class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="exportHistory">
+                ⬇ Export Booking History
+            </button>
+        </div>
 
         <!-- Booked Treks Search/Sort/Filter -->
         <div class="d-flex gap-2 mb-3 align-items-right justify-content-end">
@@ -375,6 +380,59 @@ export default {
         getTrekById(trekId) {
             const b = this.userBookings.find(b => b.trek_id === trekId)
             return b?.trek || null
+        },
+
+        async exportHistory() {
+            const token = localStorage.getItem('token')
+            try {
+                const res = await axios.post('http://127.0.0.1:5000/export/booking-history', {}, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                this.pollExportStatus(res.data.task_id)
+            } catch (e) {
+                alert(e.response?.data?.msg || 'Failed to start export.')
+            }
+        },
+
+        pollExportStatus(taskId) {
+            const token = localStorage.getItem('token')
+            const interval = setInterval(async () => {
+                try {
+                    const res = await axios.get(`http://127.0.0.1:5000/export/status/${taskId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                    if (res.data.status === 'SUCCESS') {
+                        clearInterval(interval)
+                        this.downloadExportedFile(res.data.filename)
+                    } else if (res.data.status === 'FAILURE') {
+                        clearInterval(interval)
+                        alert('Export failed. Please try again.')
+                    }
+                } catch (e) {
+                    clearInterval(interval)
+                    alert('Error checking export status.')
+                }
+            }, 2000)
+        },
+
+        async downloadExportedFile(filename) {
+            const token = localStorage.getItem('token')
+            try {
+                const res = await axios.get(`http://127.0.0.1:5000/export/download/${filename}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'blob'
+                })
+                const url = window.URL.createObjectURL(new Blob([res.data]))
+                const link = document.createElement('a')
+                link.href = url
+                link.setAttribute('download', filename)
+                document.body.appendChild(link)
+                link.click()
+                link.remove()
+                alert('Booking history downloaded successfully!')
+            } catch (e) {
+                alert('Failed to download file.')
+            }
         },
 
         handleViewClick(trek) { this.currentTrek = trek },

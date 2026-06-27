@@ -194,7 +194,6 @@ export default {
     statusClass() {
       const s = (this.profile.status || '').toLowerCase()
       if (s === 'active') return 'status-active'
-      if (s === 'inactive') return 'status-inactive'
       if (s === 'blacklisted') return 'status-blacklisted'
       return ''
     },
@@ -390,11 +389,6 @@ export default {
 .status-active {
   background-color: #e8f8ee;
   color: #1f9d55;
-}
-
-.status-inactive {
-  background-color: #fdf0e3;
-  color: #c4791f;
 }
 
 .status-blacklisted {

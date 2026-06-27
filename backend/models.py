@@ -13,7 +13,6 @@ class UserRole:
 class UserStatus:
     ACTIVE      = "active"
     BLACKLISTED = "blacklisted"
-    INACTIVE    = "inactive"
 
 class TrekDifficulty:
     EASY     = "Easy"
@@ -52,7 +51,7 @@ class User(db.Model):
     password_hash= db.Column(db.String(256), nullable=False)
     role         = db.Column(db.String(10),  nullable=False)
     contact      = db.Column(db.String(20),  nullable=True)
-    status       = db.Column(db.String(20),  default="inactive",  nullable=True)      
+    status       = db.Column(db.String(20),  default="active",  nullable=True)      
     created_at   = db.Column(db.DateTime,    default=datetime.utcnow)
 
     # Relationships

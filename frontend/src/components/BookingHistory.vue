@@ -51,6 +51,9 @@
                 <option value="Paid">Paid</option>
                 <option value="Refund">Refund</option>
             </select>
+            <button v-if="role === 'staff' && $route.query.trek_id" class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="openExportParticipantsModal">
+                ⬇ Export Participants
+            </button>
             <button class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="fetchBookings" :disabled="loading">
                 <span v-if="loading" class="spinner-border spinner-border-sm"></span>
                 <span v-else>↻ Refresh</span>
@@ -189,6 +192,25 @@
                 </div>
             </div>
         </div>
+      
+      <!-- Export Participants Modal -->
+      <div class="modal fade" id="exportParticipantsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Export Participants</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p class="mb-0">Include cancelled bookings in the participant list?</p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" @click="confirmExportParticipants(false)">No, exclude cancelled</button>
+              <button class="btn btn-sm text-white" style="background-color: #9e52eb;" data-bs-dismiss="modal" @click="confirmExportParticipants(true)">Yes, include cancelled</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
 </template>
@@ -425,6 +447,63 @@ export default {
       this.filterStatus  = ''
       this.filterPayment = ''
       this.page          = 1
+    },
+
+    openExportParticipantsModal() {
+      const modalEl = document.getElementById('exportParticipantsModal')
+      bootstrap.Modal.getOrCreateInstance(modalEl).show()
+    },
+
+    async confirmExportParticipants(includeCancelled) {
+      const trekId = this.$route.query.trek_id
+      if (!trekId) return
+      try {
+        const res = await axios.post(
+          `http://127.0.0.1:5000/export/trek-participants/${trekId}`,
+          { include_cancelled: includeCancelled },
+          { headers: this.authHeader() }
+        )
+        this.pollExportStatus(res.data.task_id)
+      } catch (e) {
+        alert(e.response?.data?.msg || 'Failed to start export.')
+      }
+    },
+
+    pollExportStatus(taskId) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await axios.get(`http://127.0.0.1:5000/export/status/${taskId}`, { headers: this.authHeader() })
+          if (res.data.status === 'SUCCESS') {
+            clearInterval(interval)
+            this.downloadExportedFile(res.data.filename)
+          } else if (res.data.status === 'FAILURE') {
+            clearInterval(interval)
+            alert('Export failed. Please try again.')
+          }
+        } catch (e) {
+          clearInterval(interval)
+          alert('Error checking export status.')
+        }
+      }, 2000)
+    },
+
+    async downloadExportedFile(filename) {
+      try {
+        const res = await axios.get(`http://127.0.0.1:5000/export/download/${filename}`, {
+          headers: this.authHeader(),
+          responseType: 'blob'
+        })
+        const url = window.URL.createObjectURL(new Blob([res.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', filename)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        alert('Participant list downloaded successfully!')
+      } catch (e) {
+        alert('Failed to download file.')
+      }
     },
   },
 
