@@ -287,7 +287,7 @@ export default {
             }
         },
         async handleDeleteTrek(trek_id) {
-            if (!confirm('Are you sure you want to delete this trek?')) return
+            if (!confirm('Are you sure you want to delete this trek? This action is permanent and cannot be undone.')) return
             try {
                 const token = localStorage.getItem('token')
                 const response = await axios.delete(`http://127.0.0.1:5000/treks/${trek_id}`, {

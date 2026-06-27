@@ -192,6 +192,7 @@ class SignupResource(Resource):
         new_user = User(username=username, email=email, password_hash=hashed_password, role=role, contact=contact, status=status, created_at=created_at)
         db.session.add(new_user)
         db.session.commit()
+        cache.delete("users_all")
         response = jsonify({"username": username, "email": email, "msg": "user created correctly"})
         return make_response(response, 200)
 
@@ -202,6 +203,7 @@ class SignupResource(Resource):
 # -------------------------------------------------------Trek--------------------------------------------------------------------------------------
 class TrekListResource(Resource):
     @jwt_required()
+    @cache.cached(timeout=120, key_prefix="treks_all")
     def get(self):
         treks = Trek.query.all()
         return [trek.serialize() for trek in treks]
@@ -249,6 +251,9 @@ class TrekListResource(Resource):
         if "images" in data and data["images"]:
             new_trek.images = data["images"]
             db.session.commit()
+
+        cache.delete("treks_all")
+        cache.delete("user_treks")
 
         return {"msg": msg, "trek": new_trek.serialize()}, 201    
 
@@ -314,8 +319,30 @@ class TrekResource(Resource):
         for booking in cancelled_pending:
             send_pending_cancelled_email.delay(booking.booking_id)
 
+        cache.delete("treks_all")
+        cache.delete("user_treks")
+
         return {"msg": msg, "trek": trek.serialize()}
 
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    def delete(self, trek_id):
+        trek = Trek.query.get(trek_id)
+        if not trek:
+            return {"msg": "Trek not found"}, 404
+
+        existing_bookings = Booking.query.filter_by(trek_id=trek_id).first()
+        if existing_bookings:
+            return {"msg": "Cannot delete a trek that has bookings. Cancel or close it instead."}, 400
+
+        db.session.delete(trek)
+        db.session.commit()
+
+        cache.delete("treks_all")
+        cache.delete("user_treks")
+
+        return {"msg": "Trek deleted successfully"}, 200
+    
 # ----------------------------------------------------------------Staff-------------------------------------------------------------------------
 
 class StaffTrekListResource(Resource):
@@ -388,10 +415,17 @@ class TrekStaffUpdateResource(Resource):
         for booking in cancelled_pending:
             send_pending_cancelled_email.delay(booking.booking_id)
 
+        cache.delete("treks_all")
+        cache.delete("user_treks")
+
         return {"msg": msg, "trek": trek.serialize()}
+
+def _user_bookings_cache_key():
+    return f"user_bookings_{get_jwt_identity()}"
 
 class UserBookingSummaryResource(Resource):
     @jwt_required()
+    @cache.cached(timeout=30, make_cache_key=_user_bookings_cache_key)
     def get(self):
         current_user = get_current_user()
         bookings = Booking.query.filter_by(user_id=current_user.user_id).all()
@@ -509,7 +543,11 @@ class BookingListResource(Resource):
         except Exception as e:
             db.session.rollback()
             return {"msg": "Booking failed — possible duplicate Aadhar or booking"}, 409
- 
+
+        cache.delete("treks_all")
+        cache.delete("user_treks")
+        cache.delete(f"user_bookings_{get_jwt_identity()}")
+
         return {
             "msg"          : "Booking successful",
             "booking"      : new_booking.serialize(),
@@ -590,6 +628,11 @@ class BookingResource(Resource):
         booking.status = BookingStatus.CANCELLED
         booking.payment_status=PaymentStatus.REFUND
         db.session.commit()
+
+        cache.delete("treks_all")
+        cache.delete("user_treks")
+        cache.delete(f"user_bookings_{get_jwt_identity()}")
+
         return {"msg": "Booking cancelled successfully"}, 200
     
 #-------------------------------------------------Pending Users------------------------------------------------------------------------------------
@@ -612,6 +655,7 @@ class UserApprovalResource(Resource):
         
         user.status = status
         db.session.commit()
+        cache.delete("users_all")
         send_status_change_notice.delay(user.user_id)
         return jsonify({"msg": "User status changed to "+status+" successfully"})
 
@@ -629,6 +673,7 @@ class UserApprovalResource(Resource):
 class UsersListResource(Resource):
     @jwt_required()
     @role_required([UserRole.ADMIN, UserRole.STAFF])
+    @cache.cached(timeout=300, key_prefix="users_all")
     def get(self):
         users = User.query.all()
         return jsonify([user.serialize() for user in users])
@@ -636,6 +681,7 @@ class UsersListResource(Resource):
 # - USER: only Open/Approved treks
 class UserTrekListResource(Resource) :
     @jwt_required()
+    @cache.cached(timeout=120, key_prefix="user_treks")
     def get(self):
         treks = Trek.query. filter(Trek.status.in_([TrekStatus. OPEN, TrekStatus.APPROVED]) ).all()
         return [trek.serialize() for trek in treks]
@@ -671,6 +717,7 @@ class StaffCreateResource(Resource):
         )
         db.session.add(new_staff)
         db.session.commit()
+        cache.delete("users_all")
         return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
 
