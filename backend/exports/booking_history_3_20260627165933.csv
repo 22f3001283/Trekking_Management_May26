@@ -1,0 +1,4 @@
+Booking ID,User ID,Trek Name,Location,Booking Status,Trek Start Date,Trek End Date,Booked on,No. of Participants
+4,3,Mountaining,Vizag,Booked,2026-06-21,2026-06-23,2026-06-20 22:46:33,1
+5,3,Kommadi Pond,"Kommadi, Vizag",Booked,2026-06-21,2026-06-21,2026-06-20 22:47:08,1
+10,3,Araku Trek,"Araku, Visakhapatnam",Cancelled,2026-06-25,2026-06-27,2026-06-25 00:28:09,1

@@ -164,7 +164,7 @@ class LoginResource(Resource):
             return make_response(response, 401)
         
         if user.status != "active":
-            response = jsonify({"msg": "Wait till you are Verified"})
+            response = jsonify({"msg": "You have been blacklisted, please contact the support team."})
             return make_response(response, 409)
 
         access_token = create_access_token(identity=user.username)
@@ -443,7 +443,7 @@ class BookingListResource(Resource):
         if not trek:
             return {"msg": "Trek not found"}, 404
  
-        if trek.status not in [TrekStatus.OPEN, TrekStatus.APPROVED]:
+        if trek.status not in [TrekStatus.OPEN]:
             return {"msg": "Trek is not open for booking"}, 400
  
         if trek.available_slots < len(participants):
@@ -725,7 +725,9 @@ class UserProfileResource(Resource):
         db.session.commit()
         return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
  
+
 #-------------------------------------------Export Booking History------------------------------------------------------------------------------
+
 class ExportBookingHistoryResource(Resource):
     @jwt_required()
     def post(self):
@@ -808,7 +810,7 @@ api.add_resource(ExportDownloadResource, '/export/download/<string:filename>')
 api.add_resource(ExportTrekParticipantsResource, '/export/trek-participants/<int:trek_id>')
 
 
-#-------------------------------Scheduling Daily Reminders-----------------------
+#-----------------------------------------------------Scheduling Tasks------------------------------------------------------------------------------
 
 @celery.task(name="tasks.send_daily_reminders")
 def send_daily_reminders():
@@ -832,12 +834,12 @@ def send_daily_reminders():
                 continue
 
             trek_lines = "\n\n".join(
-                f"- {b.trek.trek_name} ({b.trek.location or 'TBD'})\n"
-                f"  Start Date     : {b.trek.start_date}\n"
-                f"  End Date       : {b.trek.end_date}\n"
-                f"  Difficulty     : {b.trek.difficulty or 'N/A'}\n"
-                f"  Booking Status : {b.status}\n"
-                f"  Payment Status : {b.payment_status}"
+                f" {b.trek.trek_name} ({b.trek.location or 'TBD'})\n"
+                f"  Start Date     :  {b.trek.start_date}\n"
+                f"  End Date       :  {b.trek.end_date}\n"
+                f"  Difficulty     :  {b.trek.difficulty or 'N/A'}\n"
+                f"  Booking Status :  {b.status}\n"
+                f"  Payment Status :  {b.payment_status}"
                 for b in user_bookings
             )
 
@@ -845,7 +847,6 @@ def send_daily_reminders():
                 f"Hi {user.username},\n\n"
                 f"Here's a reminder of your upcoming trek(s):\n\n"
                 f"{trek_lines}\n\n"
-                f"Please arrive at the meeting point at least 30 minutes early and carry a valid ID.\n"
                 f"If any Payment Status above shows Pending, please complete payment soon to keep your slot.\n\n"
                 f"If you wish to cancel your booking, please ensure that the cancellation request is made before the registration period closes.\n\n"
                 f"Kindly note that after the registration deadline has passed, cancellations will not be accepted and no refunds will be provided.\n\n"
@@ -878,30 +879,31 @@ def send_close_warning_notice():
             print(f"[Close Warning] No open treks starting on {target_date}.")
             return "No treks to warn about"
 
-        admins = User.query.filter_by(role=UserRole.ADMIN).all()
+        admin = User.query.filter_by(role=UserRole.ADMIN).first()
         sent = 0
 
         for trek in treks:
             recipients = set()
             if trek.assigned_staff and trek.assigned_staff.email:
                 recipients.add(trek.assigned_staff.email)
-            recipients.update(a.email for a in admins if a.email)
+            if admin and admin.email:
+                recipients.add(admin.email)
 
             if not recipients:
                 continue
 
             body = (
-                f"Hi,\n\n"
+                f"Hi ,\n\n"
                 f"The trek '{trek.trek_name}' starts on {trek.start_date} (2 days from now) "
                 f"and is still '{trek.status}', not Closed.\n\n"
                 f"Please close it manually before then. If it isn't closed, the system will "
-                f"automatically close it at 7:00 AM the day before the trek starts, and any "
+                f"automatically close it at 7:05 AM the day before the trek starts, and any "
                 f"bookings with pending payment will be cancelled at that time.\n\n"
                 f"- TMA System"
             )
             try:
                 mail.send(Message(
-                    subject=f"Action needed: please close '{trek.trek_name}' before it starts",
+                    subject=f"Action needed: Please close '{trek.trek_name}' before it starts",
                     recipients=list(recipients),
                     body=body,
                 ))
@@ -985,18 +987,29 @@ def send_trek_notice():
                 if not user or not user.email:
                     continue
 
+                participants = booking.participants.all()
+                participant_lines = "\n".join(
+                    f"  - {p.name}- Aadhar Number: {p.aadhar} (DOB: {p.dob})" for p in participants
+                ) or "  - No participants found for this booking"
+
                 body = (
                     f"Hi {user.username},\n\n"
-                    f"This is a reminder that your trek '{trek.trek_name}' starts tomorrow.\n\n"
-                    f"Start Date : {trek.start_date}\n"
-                    f"End Date   : {trek.end_date}\n"
-                    f"Location   : {trek.location or 'TBD'}\n\n"
-                    f"Instructions:\n"
-                    f"- Please carry your Aadhar card with you and arrive at sharp 7:00 AM tomorrow to the location.\n"
-                    f"- No refund will be issued if you do not attend.\n\n"
+                    f"Your trek '{trek.trek_name}' begins tomorrow — here are the details:\n\n"
+                    f"  Trek       : {trek.trek_name}\n"
+                    f"  Location   : {trek.location or 'TBD'}\n"
+                    f"  Start Date : {trek.start_date}\n"
+                    f"  End Date   : {trek.end_date}\n"
+                    f"  Difficulty : {trek.difficulty or 'N/A'}\n\n"
+                    f"Participants registered under this booking:\n"
+                    f"{participant_lines}\n\n"
+                    f"Before you head out, please keep these in mind:\n\n"
+                    f"  1. Arrive at the meeting point sharp at 7:00 AM tomorrow.\n"
+                    f"  2. Carry your Aadhar card with you — it's required for verification.\n"
+                    f"  3. Pack according to the trek's difficulty and duration.\n"
+                    f"  4. No refund will be issued for no-shows, so please plan accordingly.\n\n"
+                    f"We're looking forward to having you on the trail!\n\n"
                     f"- TMA Team"
                 )
-
                 try:
                     mail.send(Message(
                         subject=f"Reminder: {trek.trek_name} starts tomorrow!",
@@ -1006,7 +1019,6 @@ def send_trek_notice():
                     sent += 1
                 except Exception as e:
                     print(f"[Trek Notice] Failed to email {user.email}: {e}")
-
         print(
             f"[Trek Notice] {target_date}: "
             f"{sent} reminder(s), "
@@ -1030,34 +1042,36 @@ def send_status_change_notice(user_id):
         
         if user.status == UserStatus.ACTIVE:
             body = f"""
-            Hello {user.username},
+Hello {user.username},
 
-            We are pleased to inform you that your account status has been updated to Active.
+We are pleased to inform you that your account status has been updated to Active.
 
-            You can now access all the features and services available on our platform.
+You can now access all the features and services available on our platform.
 
-            If you have any questions or need assistance, please feel free to contact our support team.
+If you have any questions or need assistance, please feel free to contact our support team.
 
-            Thank you for being with us.
+Thank you for being with us.
 
-            Best regards,
-            The Team
+Best regards,
+
+TMA Team
             """
 
         else:
             body = f"""
-            Hello {user.username},
+Hello {user.username},
 
-            This is to inform you that your account status has been updated to Blacklisted.
+This is to inform you that your account status has been updated to Blacklisted.
 
-            As a result, your access to certain features or services may be restricted.
+As a result, your access to certain features or services may be restricted.
 
-            If you believe this has been done in error or would like more information, please contact our support team.
+If you believe this has been done in error or would like more information, please contact our support team.
 
-            Thank you for your understanding.
+Thank you for your understanding.
 
-            Best regards,
-            The Team
+Best regards,
+
+TMA Team
             """
 
         try:
@@ -1071,22 +1085,64 @@ def send_status_change_notice(user_id):
 
         except Exception as e:
             print(f"Failed to email user {user.user_id}: {e}")
+ 
             return "Failed to send email."
+
+
+@celery.task(name="tasks.export_booking_history_csv")
+def export_booking_history_csv(user_id):
+    with app.app_context():
+        bookings = Booking.query.filter_by(user_id=user_id).all()
+
+        filename = f"booking_history_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filepath = os.path.join(EXPORT_DIR, filename)
+
+        with open(filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Booking ID", "User ID", "Trek Name", "Location", "Booking Status", "Trek Start Date", "Trek End Date", "Booked on" , "No. of Participants"])
+            for b in bookings:
+                writer.writerow([
+                    b.booking_id,
+                    b.user_id,
+                    b.trek.trek_name if b.trek else "",
+                    b.trek.location if b.trek else "",
+                    b.status,
+                    b.trek.start_date,
+                    b.trek.end_date,
+                    b.booking_date.strftime("%Y-%m-%d %H:%M:%S") if b.booking_date else "",
+                    b.num_people,
+                ])
+
+        return filename
     
-#-----------------------------------------------------------------------------------Backend Jobs------------------------------------------------------------------------------------
-def cancel_pending_bookings_for_trek(trek):
-    """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
-    Frees slots immediately; returns affected bookings so emails can be sent after commit."""
-    pending_bookings = Booking.query.filter_by(
-        trek_id=trek.trek_id, status=BookingStatus.BOOKED, payment_status=PaymentStatus.PENDING
-    ).all()
+@celery.task(name="tasks.export_trek_participants_csv")
+def export_trek_participants_csv(trek_id, include_cancelled):
+    with app.app_context():
+        query = Booking.query.filter_by(trek_id=trek_id)
+        if not include_cancelled:
+            query = query.filter(Booking.status != BookingStatus.CANCELLED)
+        bookings = query.all()
 
-    for booking in pending_bookings:
-        if trek.available_slots is not None:
-            trek.available_slots += booking.num_people
-        booking.status = BookingStatus.CANCELLED
+        filename = f"participants_trek_{trek_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filepath = os.path.join(EXPORT_DIR, filename)
 
-    return pending_bookings
+        with open(filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Participant Name", "DOB", "Aadhar", "Booked By", "Payment Status", "Booking Status"])
+            for b in bookings:
+                booked_by = b.user.username if b.user else ""
+                for p in b.participants.all():
+                    writer.writerow([
+                        p.name,
+                        p.dob.isoformat() if p.dob else "",
+                        p.aadhar,
+                        booked_by,
+                        b.payment_status,
+                        b.status,
+                    ])
+
+        return filename
+
 
 @celery.task(name="tasks.send_pending_cancelled_email")
 def send_pending_cancelled_email(booking_id):
@@ -1120,7 +1176,7 @@ def generate_monthly_report():
         if today.month == 1:
             report_month, report_year = 12, today.year - 1
         else:
-            report_month, report_year = today.month , today.year
+            report_month, report_year = today.month, today.year
 
         month_name = date(report_year, report_month, 1).strftime("%B %Y")
 
@@ -1140,6 +1196,11 @@ def generate_monthly_report():
 
         participant_user_ids = {b.user_id for b in bookings}
 
+        # Total participants: sum of num_people across COMPLETED bookings only,
+        # on treks that are COMPLETED and started in this month
+        completed_bookings = [b for b in bookings if b.status == BookingStatus.COMPLETED]
+        total_participants = sum(b.num_people or 0 for b in completed_bookings)
+
         booking_counts = {}
         for b in bookings:
             booking_counts[b.trek_id] = booking_counts.get(b.trek_id, 0) + 1
@@ -1151,7 +1212,13 @@ def generate_monthly_report():
             if trek:
                 popular_treks.append((trek.trek_name, count))
 
-        html_body = _build_report_html(month_name, len(treks_conducted), len(participant_user_ids), popular_treks)
+        html_body = _build_report_html(
+            month_name,
+            len(treks_conducted),
+            len(participant_user_ids),
+            total_participants,
+            popular_treks,
+        )
 
         admins = User.query.filter_by(role=UserRole.ADMIN).all()
         recipients = [a.email for a in admins if a.email]
@@ -1172,79 +1239,132 @@ def generate_monthly_report():
             print(f"[Monthly Report] Failed to send: {e}")
             return f"Failed: {e}"
 
+#-----------------------------------------------------------------------------------Backend Jobs------------------------------------------------------------------------------------
 
-def _build_report_html(month_name, treks_count, users_count, popular_treks):
-    rows = "".join(
-        f"<tr><td>{name}</td><td>{count}</td></tr>" for name, count in popular_treks
-    ) or "<tr><td colspan='2'>No bookings this month</td></tr>"
+def cancel_pending_bookings_for_trek(trek):
+    """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
+    Frees slots immediately; returns affected bookings so emails can be sent after commit."""
+    pending_bookings = Booking.query.filter_by(
+        trek_id=trek.trek_id, status=BookingStatus.BOOKED, payment_status=PaymentStatus.PENDING
+    ).all()
+
+    for booking in pending_bookings:
+        if trek.available_slots is not None:
+            trek.available_slots += booking.num_people
+        booking.status = BookingStatus.CANCELLED
+
+    return pending_bookings
+
+def _build_report_html(month_name, treks_count, users_count, total_participants, popular_treks):
+    # Build ranked rows for popular treks with a visual bar + medal for top 3
+    medals = ["🥇", "🥈", "🥉"]
+    max_count = max((c for _, c in popular_treks), default=1)
+
+    if popular_treks:
+        rows = ""
+        for i, (name, count) in enumerate(popular_treks):
+            rank_label = medals[i] if i < 3 else f"#{i+1}"
+            bar_width = max(int((count / max_count) * 100), 8)
+            rows += f"""
+            <tr>
+              <td style="padding:14px 8px; font-size:20px; text-align:center; width:40px;">{rank_label}</td>
+              <td style="padding:14px 8px;">
+                <div style="font-weight:600; color:#1f2937; font-size:14px; margin-bottom:6px;">{name}</div>
+                <div style="background:#eef2f7; border-radius:6px; height:8px; width:100%; overflow:hidden;">
+                  <div style="background:linear-gradient(90deg,#6366f1,#8b5cf6); height:8px; width:{bar_width}%; border-radius:6px;"></div>
+                </div>
+              </td>
+              <td style="padding:14px 8px; text-align:right; white-space:nowrap;">
+                <span style="font-weight:700; color:#4f46e5; font-size:15px;">{count}</span>
+                <span style="color:#9ca3af; font-size:12px;"> bookings</span>
+              </td>
+            </tr>
+            """
+    else:
+        rows = """
+        <tr>
+          <td colspan="3" style="padding:24px 8px; text-align:center; color:#9ca3af; font-size:14px;">
+            No bookings recorded this month
+          </td>
+        </tr>
+        """
 
     return f"""
     <html>
-      <body style="font-family: Arial, sans-serif;">
-        <h2>TMA Monthly Activity Report — {month_name}</h2>
-        <table style="border-collapse: collapse; margin-bottom: 20px;">
-          <tr><td style="padding:4px 12px;"><b>Treks Conducted</b></td><td style="padding:4px 12px;">{treks_count}</td></tr>
-          <tr><td style="padding:4px 12px;"><b>Users Participated</b></td><td style="padding:4px 12px;">{users_count}</td></tr>
-        </table>
-        <h3>Most Popular Treks</h3>
-        <table border="1" cellpadding="6" style="border-collapse: collapse;">
-          <tr><th>Trek Name</th><th>Bookings</th></tr>
-          {rows}
-        </table>
+      <body style="margin:0; padding:0; background:#f3f4f6; font-family:'Segoe UI', Arial, sans-serif;">
+        <div style="max-width:600px; margin:0 auto; padding:24px 16px;">
+
+          <!-- Header card -->
+          <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed); border-radius:16px 16px 0 0; padding:32px 28px; color:#ffffff;">
+            <div style="font-size:13px; letter-spacing:1.5px; text-transform:uppercase; opacity:0.85; margin-bottom:6px;">
+              TMA Monthly Activity Report
+            </div>
+            <div style="font-size:26px; font-weight:700;">{month_name}</div>
+          </div>
+
+          <!-- Stat cards -->
+          <div style="background:#ffffff; padding:24px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="33.33%" style="padding-right:5px; vertical-align:top;">
+                  <div style="background:#f5f3ff; border-radius:12px; padding:16px 10px; text-align:center;">
+                    <div style="font-size:26px; font-weight:800; color:#6d28d9;">{treks_count}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
+                      Treks Conducted
+                    </div>
+                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
+                      Completed treks starting in {month_name}
+                    </div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding:0 5px; vertical-align:top;">
+                  <div style="background:#eff6ff; border-radius:12px; padding:16px 10px; text-align:center;">
+                    <div style="font-size:26px; font-weight:800; color:#2563eb;">{users_count}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
+                      Users Participated
+                    </div>
+                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
+                      Unique users on those completed treks
+                    </div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding-left:5px; vertical-align:top;">
+                  <div style="background:#ecfdf5; border-radius:12px; padding:16px 10px; text-align:center;">
+                    <div style="font-size:26px; font-weight:800; color:#059669;">{total_participants}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
+                      Total Participants
+                    </div>
+                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
+                      Headcount across completed bookings
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Popular treks -->
+          <div style="background:#ffffff; padding:4px 20px 24px;">
+            <div style="font-size:15px; font-weight:700; color:#1f2937; margin-bottom:4px; padding-top:8px; border-top:1px solid #f0f0f0;">
+              🏔️ Most Popular Treks
+            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
+              {rows}
+            </table>
+          </div>
+
+          <!-- Footer -->
+          <div style="background:#ffffff; border-radius:0 0 16px 16px; padding:18px 20px; text-align:center; border-top:1px solid #f0f0f0;">
+            <div style="font-size:12px; color:#9ca3af;">
+              Automated report generated by TMA System &middot; {month_name}
+            </div>
+          </div>
+
+        </div>
       </body>
     </html>
     """
 
-@celery.task(name="tasks.export_booking_history_csv")
-def export_booking_history_csv(user_id):
-    with app.app_context():
-        bookings = Booking.query.filter_by(user_id=user_id).all()
-
-        filename = f"booking_history_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
-        filepath = os.path.join(EXPORT_DIR, filename)
-
-        with open(filepath, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["User ID", "Trek Name", "Location", "Booking Status", "Dates"])
-            for b in bookings:
-                writer.writerow([
-                    b.user_id,
-                    b.trek.trek_name if b.trek else "",
-                    b.trek.location if b.trek else "",
-                    b.status,
-                    b.booking_date.strftime("%Y-%m-%d %H:%M:%S") if b.booking_date else "",
-                ])
-
-        return filename
-    
-@celery.task(name="tasks.export_trek_participants_csv")
-def export_trek_participants_csv(trek_id, include_cancelled):
-    with app.app_context():
-        query = Booking.query.filter_by(trek_id=trek_id)
-        if not include_cancelled:
-            query = query.filter(Booking.status != BookingStatus.CANCELLED)
-        bookings = query.all()
-
-        filename = f"participants_trek_{trek_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
-        filepath = os.path.join(EXPORT_DIR, filename)
-
-        with open(filepath, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Participant Name", "DOB", "Aadhar", "Booked By", "Payment Status", "Booking Status"])
-            for b in bookings:
-                booked_by = b.user.username if b.user else ""
-                for p in b.participants.all():
-                    writer.writerow([
-                        p.name,
-                        p.dob.isoformat() if p.dob else "",
-                        p.aadhar,
-                        booked_by,
-                        b.payment_status,
-                        b.status,
-                    ])
-
-        return filename
-    
 
 #-----------------------------------Celery---------------------------------------
 
@@ -1252,7 +1372,7 @@ celery.conf.timezone = 'Asia/Kolkata'
 celery.conf.beat_schedule = {
     'daily_reminder': {
         'task': 'tasks.send_daily_reminders',
-        'schedule': crontab(hour=7, minute=00),
+        'schedule': crontab(hour=7,minute=0),
     },
     'close_warning_notice': {
         'task': 'tasks.send_close_warning_notice',
@@ -1260,9 +1380,9 @@ celery.conf.beat_schedule = {
     },    
     'trek_notice':{
         'task': 'tasks.send_trek_notice',
-        'schedule': crontab(hour=7, minute=5)
+        'schedule': crontab(hour=7,minute=5)
     },
-    'monthly-report': {
+    'monthly_report': {
         'task': 'tasks.generate_monthly_report',
         'schedule': crontab(day_of_month=1, hour=7, minute=15),
     },
