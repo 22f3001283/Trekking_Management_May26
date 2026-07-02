@@ -268,7 +268,7 @@ export default {
     components: { Trek, UserNavbar, Booking },
     data() {
         return {
-            userId: parseInt(this.$route.params.id),
+            userId: parseInt(this.$route.params.user_id),
             TrekDefault,
             treks: [],
             userBookings: [],

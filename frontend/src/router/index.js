@@ -9,6 +9,7 @@ import StaffDashboard from "../views/Staff/StaffDashboard.vue";
 import BookingHistory from "../components/BookingHistory.vue";
 import AdminStaff from "../views/Admin/AdminStaff.vue";
 import AdminUsers from "../views/Admin/AdminUsers.vue";
+import AdminStats from "../views/Admin/AdminStats.vue";
 import Profile from "../views/User/Profile.vue";
 
 const router = createRouter({
@@ -25,6 +26,7 @@ const router = createRouter({
         { path: '/admin/staff', name: 'admin-staff', component: AdminStaff },
         { path: '/admin/users', name: 'admin-users', component: AdminUsers },
         { path: '/profile', name: 'profile', component: Profile, meta: { requiresRole: 'user' } },
+        { path: '/admin/stats', name: 'admin-stats', component: AdminStats }
     ]
 });
 

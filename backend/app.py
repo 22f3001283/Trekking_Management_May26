@@ -20,7 +20,7 @@ from celery import Celery
 from dotenv import load_dotenv
 from celery.schedules import crontab
 from calendar import monthrange
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 
 # Load .env
 load_dotenv()
@@ -193,6 +193,7 @@ class SignupResource(Resource):
         db.session.add(new_user)
         db.session.commit()
         cache.delete("users_all")
+        cache.delete("admin_stats")
         response = jsonify({"username": username, "email": email, "msg": "user created correctly"})
         return make_response(response, 200)
 
@@ -254,6 +255,7 @@ class TrekListResource(Resource):
 
         cache.delete("treks_all")
         cache.delete("user_treks")
+        cache.delete("admin_stats")
 
         return {"msg": msg, "trek": new_trek.serialize()}, 201    
 
@@ -321,6 +323,7 @@ class TrekResource(Resource):
 
         cache.delete("treks_all")
         cache.delete("user_treks")
+        cache.delete("admin_stats")
 
         return {"msg": msg, "trek": trek.serialize()}
 
@@ -340,6 +343,7 @@ class TrekResource(Resource):
 
         cache.delete("treks_all")
         cache.delete("user_treks")
+        cache.delete("admin_stats")
 
         return {"msg": "Trek deleted successfully"}, 200
     
@@ -417,10 +421,11 @@ class TrekStaffUpdateResource(Resource):
 
         cache.delete("treks_all")
         cache.delete("user_treks")
+        cache.delete("admin_stats")
 
         return {"msg": msg, "trek": trek.serialize()}
 
-def _user_bookings_cache_key():
+def _user_bookings_cache_key(*args, **kwargs):
     return f"user_bookings_{get_jwt_identity()}"
 
 class UserBookingSummaryResource(Resource):
@@ -547,6 +552,7 @@ class BookingListResource(Resource):
         cache.delete("treks_all")
         cache.delete("user_treks")
         cache.delete(f"user_bookings_{get_jwt_identity()}")
+        cache.delete("admin_stats")
 
         return {
             "msg"          : "Booking successful",
@@ -626,12 +632,15 @@ class BookingResource(Resource):
             trek.available_slots += booking.num_people
 
         booking.status = BookingStatus.CANCELLED
-        booking.payment_status=PaymentStatus.REFUND
+        if booking.payment_status == PaymentStatus.PAID:
+            booking.payment_status = PaymentStatus.REFUND
+        # else leave as Pendings
         db.session.commit()
 
         cache.delete("treks_all")
         cache.delete("user_treks")
         cache.delete(f"user_bookings_{get_jwt_identity()}")
+        cache.delete("admin_stats")
 
         return {"msg": "Booking cancelled successfully"}, 200
     
@@ -656,6 +665,7 @@ class UserApprovalResource(Resource):
         user.status = status
         db.session.commit()
         cache.delete("users_all")
+        cache.delete("admin_stats")
         send_status_change_notice.delay(user.user_id)
         return jsonify({"msg": "User status changed to "+status+" successfully"})
 
@@ -718,6 +728,7 @@ class StaffCreateResource(Resource):
         db.session.add(new_staff)
         db.session.commit()
         cache.delete("users_all")
+        cache.delete("admin_stats")
         return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
 
@@ -771,7 +782,427 @@ class UserProfileResource(Resource):
  
         db.session.commit()
         return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
- 
+
+
+#-----------------------------------------------------------------Admin Stats------------------------------------------------------------------
+class AdminStatsResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    @cache.cached(timeout=120, key_prefix="admin_stats")
+    def get(self):
+        # ---------- latest booking per (user, trek) ----------
+        # booking_id is auto-increment, so MAX(booking_id) per (user_id, trek_id)
+        # is always that pair's most recent booking (booked -> cancelled -> rebooked etc.)
+        latest_booking_ids_sq = (
+            db.session.query(func.max(Booking.booking_id).label("booking_id"))
+            .group_by(Booking.user_id, Booking.trek_id)
+            .subquery()
+        )
+        latest_only = Booking.booking_id.in_(
+            db.session.query(latest_booking_ids_sq.c.booking_id)
+        )
+
+        # ---------- shared subquery: participant count per booking ----------
+        participant_counts_sq = (
+            db.session.query(
+                Participant.booking_id.label("booking_id"),
+                func.count(Participant.participant_id).label("cnt"),
+            )
+            .group_by(Participant.booking_id)
+            .subquery()
+        )
+
+        # ---------- KPIs ----------
+        total_treks = Trek.query.count()
+        total_bookings = Booking.query.filter(latest_only).count()
+        total_participants = (
+            db.session.query(func.count(Participant.participant_id))
+            .join(Booking, Booking.booking_id == Participant.booking_id)
+            .filter(latest_only)
+            .scalar()
+        ) or 0
+        total_users = User.query.filter_by(role=UserRole.USER).count()
+
+        revenue_scalar = (
+            db.session.query(func.sum(Trek.price * participant_counts_sq.c.cnt))
+            .select_from(Booking)
+            .join(Trek, Booking.trek_id == Trek.trek_id)
+            .join(participant_counts_sq, participant_counts_sq.c.booking_id == Booking.booking_id)
+            .filter(Booking.payment_status == PaymentStatus.PAID)
+            .filter(latest_only)
+            .scalar()
+        )
+        total_confirmed_revenue = round(revenue_scalar or 0, 2)
+
+        cancelled_bookings = Booking.query.filter(
+            Booking.status == BookingStatus.CANCELLED, latest_only
+        ).count()
+        cancellation_rate = round((cancelled_bookings / total_bookings * 100), 2) if total_bookings else 0
+
+        # ---------- Most Popular Treks (top 8 by participant count) ----------
+        popular_rows = (
+            db.session.query(
+                Trek.trek_name,
+                func.count(Participant.participant_id).label("participant_count"),
+            )
+            .select_from(Trek)
+            .join(Booking, Booking.trek_id == Trek.trek_id)
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(latest_only)
+            .group_by(Trek.trek_id)
+            .order_by(func.count(Participant.participant_id).desc())
+            .limit(8)
+            .all()
+        )
+        popular_treks = {
+            "labels": [r.trek_name for r in popular_rows],
+            "data": [r.participant_count for r in popular_rows],
+        }
+
+        # ---------- Booking Trends over time ----------
+        booking_trend_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Booking.booking_id).label("cnt"),
+            )
+            .filter(latest_only)
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        booking_trends = {
+            "labels": [r.month for r in booking_trend_rows],
+            "data": [r.cnt for r in booking_trend_rows],
+        }
+
+        # ---------- Monthly Participation ----------
+        participation_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Participant.participant_id).label("cnt"),
+            )
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(latest_only)
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        monthly_participation = {
+            "labels": [r.month for r in participation_rows],
+            "data": [r.cnt for r in participation_rows],
+        }
+
+        # ---------- User Registrations per month (unaffected — not booking-derived) ----------
+        user_reg_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", User.created_at).label("month"),
+                func.count(User.user_id).label("cnt"),
+            )
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        user_registrations = {
+            "labels": [r.month for r in user_reg_rows],
+            "data": [r.cnt for r in user_reg_rows],
+        }
+
+        # ---------- Treks by status (unaffected — not booking-derived) ----------
+        status_month_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Trek.created_at).label("month"),
+                Trek.status,
+                func.count(Trek.trek_id).label("cnt"),
+            )
+            .group_by("month", Trek.status)
+            .order_by("month")
+            .all()
+        )
+        months = sorted({r.month for r in status_month_rows})
+        all_statuses = [
+            TrekStatus.PENDING, TrekStatus.APPROVED, TrekStatus.OPEN,
+            TrekStatus.CLOSED, TrekStatus.COMPLETED, TrekStatus.CANCELLED,
+        ]
+        status_counts = {s: {m: 0 for m in months} for s in all_statuses}
+        for r in status_month_rows:
+            status_counts[r.status][r.month] = r.cnt
+
+        treks_by_status = {
+            "labels": months,
+            "datasets": [
+                {"label": status, "data": [status_counts[status][m] for m in months]}
+                for status in all_statuses
+            ],
+        }
+
+        # ---------- Booking Status breakdown ----------
+        status_rows = (
+            db.session.query(Booking.status, func.count(Booking.booking_id))
+            .filter(latest_only)
+            .group_by(Booking.status)
+            .all()
+        )
+        booking_status_breakdown = {
+            "labels": [r[0] for r in status_rows],
+            "data": [r[1] for r in status_rows],
+        }
+
+        # ---------- Difficulty distribution (unaffected — not booking-derived) ----------
+        diff_rows = (
+            db.session.query(Trek.difficulty, func.count(Trek.trek_id))
+            .group_by(Trek.difficulty)
+            .all()
+        )
+        difficulty_distribution = {
+            "labels": [r[0] or "Unspecified" for r in diff_rows],
+            "data": [r[1] for r in diff_rows],
+        }
+
+        # ---------- Cancellation rate over time ----------
+        total_per_month_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Booking.booking_id).label("total"),
+            )
+            .filter(latest_only)
+            .group_by("month")
+            .all()
+        )
+        cancelled_per_month_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Booking.booking_id).label("cancelled"),
+            )
+            .filter(Booking.status == BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .group_by("month")
+            .all()
+        )
+        total_map = {r.month: r.total for r in total_per_month_rows}
+        cancelled_map = {r.month: r.cancelled for r in cancelled_per_month_rows}
+        cancel_months = sorted(total_map.keys())
+        cancellation_rate_trend = {
+            "labels": cancel_months,
+            "data": [
+                round((cancelled_map.get(m, 0) / total_map[m] * 100), 2) if total_map[m] else 0
+                for m in cancel_months
+            ],
+        }
+
+        # ---------- Revenue trend (Paid only) ----------
+        revenue_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.sum(Trek.price * participant_counts_sq.c.cnt).label("revenue"),
+            )
+            .select_from(Booking)
+            .join(Trek, Booking.trek_id == Trek.trek_id)
+            .join(participant_counts_sq, participant_counts_sq.c.booking_id == Booking.booking_id)
+            .filter(Booking.payment_status == PaymentStatus.PAID)
+            .filter(latest_only)
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        revenue_trend = {
+            "labels": [r.month for r in revenue_rows],
+            "data": [round(r.revenue or 0, 2) for r in revenue_rows],
+        }
+
+        return {
+            "kpis": {
+                "total_treks": total_treks,
+                "total_bookings": total_bookings,
+                "total_participants": total_participants,
+                "total_users": total_users,
+                "total_confirmed_revenue": total_confirmed_revenue,
+                "cancellation_rate": cancellation_rate,
+            },
+            "charts": {
+                "popular_treks": popular_treks,
+                "booking_trends": booking_trends,
+                "monthly_participation": monthly_participation,
+                "user_registrations": user_registrations,
+                "treks_by_status": treks_by_status,
+                "booking_status_breakdown": booking_status_breakdown,
+                "difficulty_distribution": difficulty_distribution,
+                "cancellation_rate_trend": cancellation_rate_trend,
+                "revenue_trend": revenue_trend,
+            },
+        }, 200
+    
+#-------------------------------------------Public Stats------------------------------------------------------------
+
+class PublicStatsResource(Resource):
+    """
+    GET /public/stats — no auth required, safe for the homepage.
+    Only exposes aggregate, non-identifying numbers.
+    """
+    @cache.cached(timeout=600, key_prefix="public_stats")
+    def get(self):
+        today = date.today()
+        current_year = today.year
+
+        # ---- de-dup: latest booking per (user, trek), same logic as admin stats ----
+        latest_booking_ids_sq = (
+            db.session.query(func.max(Booking.booking_id).label("booking_id"))
+            .group_by(Booking.user_id, Booking.trek_id)
+            .subquery()
+        )
+        latest_only = Booking.booking_id.in_(
+            db.session.query(latest_booking_ids_sq.c.booking_id)
+        )
+
+        # ---- % of treks completed ----
+        total_treks_ever = Trek.query.count()
+        completed_treks = Trek.query.filter_by(status=TrekStatus.COMPLETED).count()
+        completion_rate = round((completed_treks / total_treks_ever * 100), 1) if total_treks_ever else 0
+
+        # ---- available / upcoming treks right now ----
+        upcoming_treks = Trek.query.filter(
+            Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED])
+        ).count()
+
+        # ---- unique participants (distinct aadhar, from active bookings only) ----
+        unique_participants = (
+            db.session.query(func.count(func.distinct(Participant.aadhar)))
+            .join(Booking, Booking.booking_id == Participant.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .scalar()
+        ) or 0
+
+        # ---- unique treks offered (by name) & unique destinations ----
+        unique_trek_names = db.session.query(func.count(func.distinct(Trek.trek_name))).scalar() or 0
+        unique_destinations = (
+            db.session.query(func.count(func.distinct(Trek.location)))
+            .filter(Trek.location.isnot(None))
+            .scalar()
+        ) or 0
+
+        # ---- difficulty mix, currently open/approved only ----
+        diff_rows = (
+            db.session.query(Trek.difficulty, func.count(Trek.trek_id))
+            .filter(Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED]))
+            .filter(Trek.difficulty.isnot(None))
+            .group_by(Trek.difficulty)
+            .all()
+        )
+        difficulty_mix = {d: c for d, c in diff_rows}
+
+        # ---- treks conducted: this year vs last year (by start_date, COMPLETED only) ----
+        treks_this_year = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('year', Trek.start_date) == current_year,
+        ).count()
+        treks_last_year = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('year', Trek.start_date) == current_year - 1,
+        ).count()
+
+        # ---- busiest month (calendar month, across all years, COMPLETED treks) ----
+        month_rows = (
+            db.session.query(
+                extract('month', Trek.start_date).label('m'),
+                func.count(Trek.trek_id).label('cnt'),
+            )
+            .filter(Trek.status == TrekStatus.COMPLETED, Trek.start_date.isnot(None))
+            .group_by('m')
+            .order_by(func.count(Trek.trek_id).desc())
+            .first()
+        )
+        month_names = ["", "January", "February", "March", "April", "May", "June",
+                       "July", "August", "September", "October", "November", "December"]
+        busiest_month = month_names[int(month_rows.m)] if month_rows else None
+
+        # ---- average treks per month, last 12 months ----
+        twelve_months_ago = today - timedelta(days=365)
+        recent_trek_count = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            Trek.start_date >= twelve_months_ago,
+        ).count()
+        avg_treks_per_month = round(recent_trek_count / 12, 1)
+
+        # ---- total participant-days delivered (completed treks only) ----
+        participant_days_scalar = (
+            db.session.query(func.sum(Trek.duration_days * Booking.num_people if False else 1))
+            .scalar()
+        )
+        # duration_days * participant count, summed across completed bookings on completed treks
+        pd_rows = (
+            db.session.query(Trek.duration_days, Booking.booking_id)
+            .join(Booking, Booking.trek_id == Trek.trek_id)
+            .filter(Trek.status == TrekStatus.COMPLETED, Booking.status == BookingStatus.COMPLETED)
+            .filter(latest_only)
+            .all()
+        )
+        participant_counts = dict(
+            db.session.query(Participant.booking_id, func.count(Participant.participant_id))
+            .group_by(Participant.booking_id).all()
+        )
+        total_participant_days = sum(
+            (dur or 0) * participant_counts.get(bid, 0) for dur, bid in pd_rows
+        )
+
+        # ---- growth trends: participants & treks over time (monthly) ----
+        participant_growth_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Participant.participant_id).label("cnt"),
+            )
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        trek_growth_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Trek.created_at).label("month"),
+                func.count(Trek.trek_id).label("cnt"),
+            )
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+
+        # ---- featured / most popular trek by name (active bookings only) ----
+        featured_row = (
+            db.session.query(Trek.trek_name, func.count(Participant.participant_id).label("cnt"))
+            .join(Booking, Booking.trek_id == Trek.trek_id)
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .group_by(Trek.trek_id)
+            .order_by(func.count(Participant.participant_id).desc())
+            .first()
+        )
+
+        return {
+            "completion_rate_pct": completion_rate,
+            "upcoming_treks": upcoming_treks,
+            "unique_participants": unique_participants,
+            "unique_treks_offered": unique_trek_names,
+            "unique_destinations": unique_destinations,
+            "difficulty_mix": difficulty_mix,
+            "treks_this_year": treks_this_year,
+            "treks_last_year": treks_last_year,
+            "busiest_month": busiest_month,
+            "avg_treks_per_month": avg_treks_per_month,
+            "total_participant_days": total_participant_days,
+            "featured_trek": featured_row.trek_name if featured_row else None,
+            "growth": {
+                "participants": {
+                    "labels": [r.month for r in participant_growth_rows],
+                    "data": [r.cnt for r in participant_growth_rows],
+                },
+                "treks": {
+                    "labels": [r.month for r in trek_growth_rows],
+                    "data": [r.cnt for r in trek_growth_rows],
+                },
+            },
+        }, 200
 
 #-------------------------------------------Export Booking History------------------------------------------------------------------------------
 
@@ -855,6 +1286,8 @@ api.add_resource(ExportBookingHistoryResource, '/export/booking-history')
 api.add_resource(ExportStatusResource, '/export/status/<string:task_id>')
 api.add_resource(ExportDownloadResource, '/export/download/<string:filename>')
 api.add_resource(ExportTrekParticipantsResource, '/export/trek-participants/<int:trek_id>')
+api.add_resource(AdminStatsResource, '/admin/stats')
+api.add_resource(PublicStatsResource, '/public/stats')
 
 
 #-----------------------------------------------------Scheduling Tasks------------------------------------------------------------------------------
@@ -1434,6 +1867,7 @@ celery.conf.beat_schedule = {
         'schedule': crontab(day_of_month=1, hour=7, minute=15),
     },
 }
+
 
 if __name__=="__main__":
     app.run(debug=True)

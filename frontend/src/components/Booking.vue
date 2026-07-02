@@ -308,19 +308,33 @@ export default {
             }
             if (!this.validate()) return
 
+            // ── Warn if editing a PAID booking ──
+            if (this.isEdit && this.booking && this.booking.status !== 'Cancelled') {
+                if (this.booking.payment_status === 'Paid') {
+                    const proceed = confirm(
+                        'Your current payment will be refunded, and this edit will create a new booking that requires payment again. Do you want to continue?'
+                    )
+                    if (!proceed) return
+                } else if (this.booking.payment_status === 'Pending') {
+                    const proceed = confirm(
+                        'Editing this booking will cancel your current pending booking and create a new one. Do you want to continue?'
+                    )
+                    if (!proceed) return
+                }
+            }
+
             this.isSubmitting = true
             this.lastAction   = paymentStatus === 'Paid' ? 'pay' : 'save'
             const token = localStorage.getItem('token')
             const userId = localStorage.getItem('user_id') || this.$route?.params?.user_id
 
-
             try {
-            // ── EDIT: cancel old booking first, then rebook ──
-            if (this.isEdit && this.booking && this.booking.status !== 'Cancelled') {
-                await axios.delete(`http://127.0.0.1:5000/bookings/${this.booking.booking_id}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-            }
+                // ── EDIT: cancel old booking first, then rebook ──
+                if (this.isEdit && this.booking && this.booking.status !== 'Cancelled') {
+                    await axios.delete(`http://127.0.0.1:5000/bookings/${this.booking.booking_id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                }
 
             // ─ Create new booking with current form data ──
             const payload = {

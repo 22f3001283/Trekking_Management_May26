@@ -69,11 +69,12 @@ export default {
     data() {
         return {
             navItems: [
-                { path: '/admin',         icon: '📊', label: 'Dashboard'  },
-                { path: '/admin/treks',   icon: '🏔️', label: 'Treks'      },
-                { path: '/admin/staff',   icon: '🧑‍✈️', label: 'Staff'      },
-                { path: '/bookings',      icon: '🎒', label: 'Bookings'   },
-                { path: '/admin/users',   icon: '🧑‍🤝‍🧑', label: 'Users'      },
+                { path: '/admin', label: 'Dashboard'},
+                { path: '/admin/treks', label: 'Treks'},
+                { path: '/admin/staff', label: 'Staff'},
+                { path: '/bookings', label: 'Bookings'},
+                { path: '/admin/users', label: 'Users'},
+                { path: '/admin/stats', label: 'Statistics'},
             ]
         }
     },
