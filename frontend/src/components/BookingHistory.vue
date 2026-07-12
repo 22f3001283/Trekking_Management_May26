@@ -3,30 +3,34 @@
     <StaffNavbar v-else-if="role === 'staff'" />
     <UserNavbar v-else-if="role === 'user'" />
 
-    <div class="container-fluid" style="margin-top: 50px; padding: 24px 80px; background-color: #f6f5fb; min-height: 100vh;">
+    <div class="container-fluid" style="margin-top: 50px; padding: 24px 80px;">
+
+        <!-- Back link, its own row above everything -->
+        <button v-if="backPath" class="btn  btn-light mb-3dropdown-toggle" type="button" @click="$router.push(backPath)" style="margin-bottom: 10px;">
+          <i class="bi bi-arrow-left"></i>  Back to dashboard
+        </button>
 
         <!-- Page header -->
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
             <div>
-                <button v-if="backPath" class="btn btn-outline-secondary btn-sm mb-2" @click="$router.push(backPath)">← Back to Dashboard</button>
                 <h2 class="fw-bold mb-1">{{ pageTitle }}</h2>
                 <p class="text-muted small mb-0">{{ pageSub }}</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <div class="border rounded-3 text-center px-3 py-2 bg-white" style="min-width: 70px;">
-                    <div class="fs-5 fw-bold">{{ trekScopedBookings.length }}</div>
+                <div class="border rounded-2 text-center px-3 py-2 bg-white" style="min-width: 74px;">
+                    <div class="fs-5 fw-semibold">{{ trekScopedBookings.length }}</div>
                     <div class="text-muted text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Total</div>
                 </div>
-                <div class="rounded-3 text-center px-3 py-2" style="min-width: 70px; border: 1.5px solid #9e52eb; background: #f3edff;">
-                    <div class="fs-5 fw-bold">{{ countByStatus('Booked') }}</div>
+                <div class="border rounded-2 text-center px-3 py-2 bg-white" style="min-width: 74px;">
+                    <div class="fs-5 fw-semibold text-primary">{{ countByStatus('Booked') }}</div>
                     <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Active</div>
                 </div>
-                <div class="rounded-3 text-center px-3 py-2 border border-danger bg-danger-subtle" style="min-width: 70px;">
-                    <div class="fs-5 fw-bold">{{ countByStatus('Cancelled') }}</div>
+                <div class="border rounded-2 text-center px-3 py-2 bg-white" style="min-width: 74px;">
+                    <div class="fs-5 fw-semibold text-danger">{{ countByStatus('Cancelled') }}</div>
                     <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Cancelled</div>
                 </div>
-                <div class="rounded-3 text-center px-3 py-2 border border-success bg-success-subtle" style="min-width: 70px;">
-                    <div class="fs-5 fw-bold">{{ countByStatus('Completed') }}</div>
+                <div class="border rounded-2 text-center px-3 py-2 bg-white" style="min-width: 74px;">
+                    <div class="fs-5 fw-semibold text-success">{{ countByStatus('Completed') }}</div>
                     <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: .05em;">Completed</div>
                 </div>
             </div>
@@ -35,28 +39,27 @@
         <!-- Toolbar -->
         <div class="d-flex flex-wrap gap-2 align-items-center justify-content-end mb-3">
             <div class="input-group" style="max-width: 320px;">
-                <span class="input-group-text bg-white">🔍</span>
-                <input v-model="search" type="text" class="form-control search-input-purple" placeholder="Search by booking ID, user, trek…">
-                <button v-if="search" class="btn btn-outline-secondary" type="button" @click="search = ''">✕</button>
+                <input v-model="search" type="text" class="form-control" placeholder="Search by booking ID, user, trek">
+                <button v-if="search" class="btn btn-outline-secondary" type="button" @click="search = ''">Clear</button>
             </div>
             <select v-model="filterStatus" class="form-select form-select-sm w-auto">
-                <option value="">All Statuses</option>
+                <option value="">All statuses</option>
                 <option value="Booked">Booked</option>
                 <option value="Cancelled">Cancelled</option>
                 <option value="Completed">Completed</option>
             </select>
             <select v-model="filterPayment" class="form-select form-select-sm w-auto">
-                <option value="">All Payments</option>
+                <option value="">All payments</option>
                 <option value="Pending">Pending</option>
                 <option value="Paid">Paid</option>
                 <option value="Refund">Refund</option>
             </select>
-            <button v-if="role === 'staff' && $route.query.trek_id" class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="openExportParticipantsModal">
-                ⬇ Export Participants
+            <button v-if="role === 'staff' && $route.query.trek_id" class="btn btn-outline-primary btn-sm" @click="openExportParticipantsModal">
+                Export participants
             </button>
-            <button class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="fetchBookings" :disabled="loading">
+            <button class="btn btn-outline-primary btn-sm" @click="fetchBookings" :disabled="loading">
                 <span v-if="loading" class="spinner-border spinner-border-sm"></span>
-                <span v-else>↻ Refresh</span>
+                <span v-else>Refresh</span>
             </button>
         </div>
 
@@ -72,7 +75,6 @@
 
         <!-- Empty -->
         <div v-else-if="filtered.length === 0" class="alert alert-light border text-center py-5">
-            <div class="fs-1 mb-2">🏔️</div>
             <p class="mb-3 text-muted">No bookings match your filters.</p>
             <button class="btn btn-sm btn-outline-secondary" @click="clearFilters">Clear filters</button>
         </div>
@@ -81,33 +83,30 @@
         <div v-else class="card shadow-sm border-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="thead-purple">
+                    <thead class="table-light">
                         <tr>
-                            <th class="sortable" @click="sortBy('booking_id')"># ID <span class="opacity-50">{{ sortArrow('booking_id') }}</span></th>
-                            <th class="sortable" @click="sortBy('user_id')">User <span class="opacity-50">{{ sortArrow('user_id') }}</span></th>
-                            <th class="sortable" @click="sortBy('trek_id')">Trek <span class="opacity-50">{{ sortArrow('trek_id') }}</span></th>
-                            <th class="sortable" @click="sortBy('booking_date')">Booked On <span class="opacity-50">{{ sortArrow('booking_date') }}</span></th>
+                            <th class="sortable" @click="sortBy('booking_id')">ID <span class="text-muted small">{{ sortArrow('booking_id') }}</span></th>
+                            <th class="sortable" @click="sortBy('user_id')">User <span class="text-muted small">{{ sortArrow('user_id') }}</span></th>
+                            <th class="sortable" @click="sortBy('trek_id')">Trek <span class="text-muted small">{{ sortArrow('trek_id') }}</span></th>
+                            <th class="sortable" @click="sortBy('booking_date')">Booked on <span class="text-muted small">{{ sortArrow('booking_date') }}</span></th>
                             <th>Participants</th>
-                            <th>Booking Status</th>
+                            <th>Booking status</th>
                             <th>Payment</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="b in paginated" :key="b.booking_id" style="cursor: pointer;" @click="openDetail(b)">
-                            <td class="fw-bold" style="color: #9e52eb;">#{{ b.booking_id }}</td>
-                            <td><span class="badge rounded-pill" style="background-color: #ede9fb; color: #5b2ea0;">{{ getUserName(b.user_id) }}</span></td>
+                            <td class="fw-semibold text-primary">#{{ b.booking_id }}</td>
+                            <td class="fw-semibold">{{ getUserName(b.user_id) }}</td>
                             <td class="fw-semibold">{{ getTrekName(b.trek_id) }}</td>
                             <td class="text-muted small">{{ formatDate(b.booking_date) }}</td>
-                            <td class="text-center text-muted">{{ b.num_people }} 👤</td>
-                            <td>
-                                <span v-if="b.status === 'Booked'" class="badge rounded-pill" style="background-color: #ede9fb; color: #7c3fc2;">Booked</span>
-                                <span v-else class="badge rounded-pill" :class="statusBadgeClass(b.status)">{{ b.status }}</span>
-                            </td>
-                            <td><span class="badge rounded-pill" :class="paymentBadgeClass(b.payment_status)">{{ b.payment_status }}</span></td>
+                            <td class="text-muted">{{ b.num_people }}</td>
+                            <td class="fw-semibold" :class="statusTextClass(b.status)">{{ b.status }}</td>
+                            <td class="fw-semibold" :class="paymentTextClass(b.payment_status)">{{ b.payment_status }}</td>
                             <td @click.stop>
-                                <button class="btn btn-sm soft-btn me-1" style="background-color: #ede9fb; color: #7c3fc2;" @click="openDetail(b)">👁 View</button>
-                                <button v-if="b.status === 'Booked' && canCancel(b)" class="btn btn-sm soft-btn" style="background-color: #fee2e2; color: #b91c1c;" @click="cancelBooking(b)">✕ Cancel</button>
+                                <button class="btn btn-outline-primary btn-sm me-1" @click="openDetail(b)">View</button>
+                                <button v-if="b.status === 'Booked' && canCancel(b)" class="btn btn-outline-danger btn-sm" @click="cancelBooking(b)">Cancel</button>
                             </td>
                         </tr>
                     </tbody>
@@ -117,13 +116,13 @@
 
         <!-- Pagination -->
         <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-3">
-            <ul class="pagination pagination-purple mb-0">
+            <ul class="pagination pagination-sm mb-0">
                 <li class="page-item" :class="{ disabled: page === 1 }">
-                    <button class="page-link" @click="page--">‹ Prev</button>
+                    <button class="page-link" @click="page--">Prev</button>
                 </li>
                 <li class="page-item disabled"><span class="page-link border-0 bg-transparent text-muted">Page {{ page }} of {{ totalPages }}</span></li>
                 <li class="page-item" :class="{ disabled: page === totalPages }">
-                    <button class="page-link" @click="page++">Next ›</button>
+                    <button class="page-link" @click="page++">Next</button>
                 </li>
             </ul>
         </nav>
@@ -135,8 +134,7 @@
                     <div class="modal-header">
                         <div>
                             <h5 class="modal-title" id="bookingDetailModalLabel">Booking #{{ selectedBooking.booking_id }}</h5>
-                            <span v-if="selectedBooking.status === 'Booked'" class="badge rounded-pill" style="background-color: #ede9fb; color: #7c3fc2;">Booked</span>
-                            <span v-else class="badge rounded-pill" :class="statusBadgeClass(selectedBooking.status)">{{ selectedBooking.status }}</span>
+                            <span class="fw-semibold" :class="statusTextClass(selectedBooking.status)">{{ selectedBooking.status }}</span>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -151,7 +149,7 @@
                                 <div class="fw-semibold">{{ getTrekName(selectedBooking.trek_id) }} <span class="text-muted small">#{{ selectedBooking.trek_id }}</span></div>
                             </div>
                             <div class="col-6 col-md-4">
-                                <div class="text-muted text-uppercase small">Booked On</div>
+                                <div class="text-muted text-uppercase small">Booked on</div>
                                 <div class="fw-semibold">{{ formatDate(selectedBooking.booking_date) }}</div>
                             </div>
                             <div class="col-6 col-md-4">
@@ -160,19 +158,19 @@
                             </div>
                             <div class="col-6 col-md-4">
                                 <div class="text-muted text-uppercase small">Payment</div>
-                                <span class="badge rounded-pill" :class="paymentBadgeClass(selectedBooking.payment_status)">{{ selectedBooking.payment_status }}</span>
+                                <div class="fw-semibold" :class="paymentTextClass(selectedBooking.payment_status)">{{ selectedBooking.payment_status }}</div>
                             </div>
                         </div>
 
-                        <h6 class="text-uppercase small fw-bold mb-2" style="color: #9e52eb;">Participants</h6>
+                        <h6 class="text-uppercase small fw-bold mb-2 text-primary">Participants</h6>
                         <div v-if="detailLoading" class="text-center py-3">
-                            <span class="spinner-border spinner-border-sm"></span> Loading…
+                            <span class="spinner-border spinner-border-sm"></span> Loading
                         </div>
                         <p v-else-if="detailParticipants.length === 0" class="text-muted small">No participant records found.</p>
                         <div v-else class="table-responsive">
                             <table class="table table-sm">
-                                <thead class="thead-purple">
-                                    <tr><th>#</th><th>Name</th><th>Date of Birth</th><th>Aadhar</th></tr>
+                                <thead class="table-light">
+                                    <tr><th>#</th><th>Name</th><th>Date of birth</th><th>Aadhar</th></tr>
                                 </thead>
                                 <tbody>
                                     <tr v-for="(p, i) in detailParticipants" :key="p.participant_id">
@@ -186,31 +184,31 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button v-if="selectedBooking.status === 'Booked' && canCancel(selectedBooking)" class="btn btn-danger btn-sm" @click="cancelBooking(selectedBooking)">Cancel Booking</button>
+                        <button v-if="selectedBooking.status === 'Booked' && canCancel(selectedBooking)" class="btn btn-outline-danger btn-sm" @click="cancelBooking(selectedBooking)">Cancel booking</button>
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
         </div>
-      
-      <!-- Export Participants Modal -->
-      <div class="modal fade" id="exportParticipantsModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Export Participants</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+        <!-- Export Participants Modal -->
+        <div class="modal fade" id="exportParticipantsModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Export participants</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">Include cancelled bookings in the participant list?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" @click="confirmExportParticipants(false)">Exclude cancelled</button>
+                        <button class="btn btn-primary btn-sm" data-bs-dismiss="modal" @click="confirmExportParticipants(true)">Include cancelled</button>
+                    </div>
+                </div>
             </div>
-            <div class="modal-body">
-              <p class="mb-0">Include cancelled bookings in the participant list?</p>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" @click="confirmExportParticipants(false)">No, exclude cancelled</button>
-              <button class="btn btn-sm text-white" style="background-color: #9e52eb;" data-bs-dismiss="modal" @click="confirmExportParticipants(true)">Yes, include cancelled</button>
-            </div>
-          </div>
         </div>
-      </div>
 
     </div>
 </template>
@@ -298,7 +296,7 @@ export default {
         const trek = trekFilter ? this.treks.find(t => String(t.trek_id) === String(trekFilter)) : null
         return trek ? `Bookings for ${trek.trek_name}` : 'Bookings for Your Treks'
       }
-      return 'My Bookings'
+      return 'My Bookings History'
     },
 
     pageSub() {
@@ -412,19 +410,20 @@ export default {
       return 'XXXX XXXX ' + aadhar.slice(-4)
     },
 
-    statusBadgeClass(status) {
+    statusTextClass(status) {
       return {
-        'Cancelled': 'bg-danger-subtle text-danger-emphasis',
-        'Completed': 'bg-success-subtle text-success-emphasis',
-      }[status] || 'bg-light text-dark'
+        'Booked':    'text-primary',
+        'Cancelled': 'text-danger',
+        'Completed': 'text-success',
+      }[status] || 'text-dark'
     },
 
-    paymentBadgeClass(status) {
+    paymentTextClass(status) {
       return {
-        'Paid':    'bg-success-subtle text-success-emphasis',
-        'Pending': 'bg-warning-subtle text-warning-emphasis',
-        'Refund':  'bg-primary-subtle text-primary-emphasis',
-      }[status] || 'bg-light text-dark'
+        'Pending': 'text-primary',
+        'Paid':    'text-success',
+        'Refund':  'text-danger',
+      }[status] || 'text-dark'
     },
 
     sortBy(key) {
@@ -438,7 +437,7 @@ export default {
     },
 
     sortArrow(key) {
-      if (this.sortKey !== key) return '↕'
+      if (this.sortKey !== key) return ''
       return this.sortDir === -1 ? '↓' : '↑'
     },
 
@@ -527,20 +526,6 @@ export default {
 </script>
 
 <style scoped>
-/* Bootstrap has no purple token, and inline styles can't target :hover/:focus —
-   these few rules are the only non-Bootstrap CSS in this file. */
-.thead-purple th {
-    background-color: #f3edff;
-    color: #7c3fc2;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-}
 .sortable { cursor: pointer; user-select: none; }
-.sortable:hover { color: #5b2ea0; }
-.search-input-purple:focus { border-color: #9e52eb; box-shadow: none; }
-.soft-btn { border: none; }
-.soft-btn:hover { opacity: .8; }
-.pagination-purple .page-link { color: #7c3fc2; }
-.pagination-purple .page-link:hover { border-color: #9e52eb; }
+.sortable:hover { color: #4169e1; }
 </style>

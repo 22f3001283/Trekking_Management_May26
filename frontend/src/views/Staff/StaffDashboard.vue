@@ -1,70 +1,101 @@
 <template>
     <StaffNavbar />
 
-    <div class="container-fluid" style="padding-left: 100px; padding-right: 100px; padding-top: 80px;">
-
-        <h2 style="padding-bottom: 5px;">My Assigned Treks</h2>
-
-        <div class="d-flex gap-2 mb-3 align-items-right justify-content-end">
-
-            <!-- Search -->
-            <div class="input-group" style="max-width: 370px;">
-                <input class="form-control" type="search" v-model="searchQuery" :placeholder="'Search by ' + searchField.replace('_', ' ') + '...'" aria-label="Search">
-                <select class="form-select" v-model="searchField" style="max-width: 150px;">
-                    <option value="trek_name">Trek Name</option>
-                    <option value="location">Location</option>
-                    <option value="difficulty">Difficulty</option>
-                    <option value="status">Status</option>
-                </select>
-            </div>
-
-            <!-- Sort -->
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                    Sort
-                </button>
-                <div class="dropdown-menu p-3" style="min-width: 220px;">
-                    <label class="form-label fw-bold">Sort By</label>
-                    <select class="form-select" v-model="sortBy">
-                        <option value="">None</option>
-                        <option value="price_asc">Price: Low to High</option>
-                        <option value="price_desc">Price: High to Low</option>
-                        <option value="duration">Duration</option>
-                    </select>
+    <div class="container-fluid responsive-container" style="padding-top: 80px;">
+        <h2 style="padding-bottom: 5px;">My Dashboard</h2>
+        <!-- KPI Summary -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-4">
+                <div class="card h-100 border-1 shadow-sm kpi-card">
+                    <div class="card-body">
+                        <div class="text-muted text-uppercase kpi-label">Assigned Treks</div>
+                        <div class="kpi-value">{{ assignedTreksCount }}</div>
+                    </div>
                 </div>
             </div>
-
-            <!-- Filter -->
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                    Filter
-                </button>
-                <div class="dropdown-menu p-3" style="min-width: 280px;">
-                    <label class="form-label fw-bold">Difficulty</label>
-                    <select class="form-select mb-3" v-model="filterDifficulty">
-                        <option value="">All</option>
-                        <option value="Easy">Easy</option>
-                        <option value="Moderate">Moderate</option>
-                        <option value="Hard">Hard</option>
-                    </select>
-
-                    <label class="form-label fw-bold">Status</label>
-                    <select class="form-select mb-3" v-model="filterStatus">
-                        <option value="">All</option>
-                        <option value="Open">Open</option>
-                        <option value="Closed">Closed</option>
-                        <option value="Completed">Completed</option>
-                    </select>
-
-                    <button class="btn btn-outline-danger w-100" @click="resetFilters">Reset Filters</button>
+            <div class="col-6 col-lg-4">
+                <div class="card h-100 border-1 shadow-sm kpi-card">
+                    <div class="card-body">
+                        <div class="text-muted text-uppercase kpi-label">Total Participants</div>
+                        <div class="kpi-value">{{ totalParticipants }}</div>
+                    </div>
                 </div>
             </div>
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 border-1 shadow-sm kpi-card">
+                    <div class="card-body">
+                        <div class="text-muted text-uppercase kpi-label">Ongoing Tasks</div>
+                        <div class="kpi-value">{{ ongoingTasksCount }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+
+            <h3 style="padding-bottom: 5px;">My Assigned Treks</h3>
+
+            <div class="d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-2 mb-3">
+
+                <!-- Search -->
+                <div class="input-group" style="max-width: 370px;">
+                    <input class="form-control" type="search" v-model="searchQuery" :placeholder="'Search by ' + searchField.replace('_', ' ') + '...'" aria-label="Search">
+                    <select class="form-select" v-model="searchField" style="max-width: 150px;">
+                        <option value="trek_name">Trek Name</option>
+                        <option value="location">Location</option>
+                        <option value="difficulty">Difficulty</option>
+                        <option value="status">Status</option>
+                    </select>
+                </div>
+
+                <!-- Sort -->
+                <div class="dropdown">
+                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-sort-alpha-down"></i> Sort
+                    </button>
+                    <div class="dropdown-menu p-3" style="min-width: 220px;">
+                        <label class="form-label fw-bold">Sort By</label>
+                        <select class="form-select" v-model="sortBy">
+                            <option value="">None</option>
+                            <option value="price_asc">Price: Low to High</option>
+                            <option value="price_desc">Price: High to Low</option>
+                            <option value="duration">No. of Days</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filter -->
+                <div class="dropdown">
+                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-funnel"></i> Filter
+                    </button>
+                    <div class="dropdown-menu p-3" style="min-width: 280px;">
+                        <label class="form-label fw-bold">Difficulty</label>
+                        <select class="form-select mb-3" v-model="filterDifficulty">
+                            <option value="">All</option>
+                            <option value="Easy">Easy</option>
+                            <option value="Moderate">Moderate</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+
+                        <label class="form-label fw-bold">Status</label>
+                        <select class="form-select mb-3" v-model="filterStatus">
+                            <option value="">All</option>
+                            <option value="Open">Open</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+
+                        <button class="btn btn-outline-danger w-100" @click="resetFilters">Reset Filters</button>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
     <!-- Trek Cards -->
-    <div id="trekPanel" style="padding-left: 100px; padding-right: 100px;">
+    <div id="trekPanel" class="responsive-container">
         <div v-if="filteredTreks.length > 0" class="row g-4">
             <div v-for="trek in filteredTreks" :key="trek.trek_id" class="col-md-4 col-lg-3">
                 <div class="card h-100">
@@ -99,23 +130,21 @@
                         <p class="card-text">
                             <strong>Location:</strong> {{ trek.location }}<br>
                             <strong>Difficulty:</strong> {{ trek.difficulty }}<br>
-                            <strong>Duration:</strong> {{ trek.duration_days }} days<br>
+                            <strong>Dates:</strong> {{ formatDate(trek.start_date) }} - {{ formatDate(trek.end_date) }} ({{ trek.duration_days }} days)<br>
                             <strong>Available Slots:</strong> {{ trek.available_slots }}<br>
                             <strong>Price:</strong> ₹{{ trek.price }}/person<br>
                             <strong>Status:</strong> {{ trek.status }}<br>
                         </p>
-                        <div class="d-flex gap-2">
+                        <div class="d-flex gap-2 flex-column flex-sm-row">
                             <button
-                                class="btn btn-sm text-white"
+                                class="btn btn-sm btn-primary"
                                 @click="handleManageClick(trek)"
                                 data-bs-toggle="modal"
                                 data-bs-target="#staffTrekModal"
-                                style="background-color: #9e52eb;"
                             >Manage</button>
                             <button
-                                class="btn btn-sm text-white"
+                                class="btn btn-sm btn-outline-primary"
                                 @click="handleViewBookings(trek)"
-                                style="background-color: #9e52eb;"
                             >View Bookings</button>                            
                         </div>
                     </div>
@@ -166,14 +195,16 @@
                         class="btn btn-success"
                         @click="handleMarkComplete"
                         :disabled="!canEditStatus"
-                        style="background-color: #28a745;"
                     >Mark Completed</button>
-                    <button class="btn btn-secondary" data-bs-dismiss="modal" style="background-color: #818285;">Close</button>
-                    <button class="btn btn-primary text-white" @click="handleSaveChanges" style="background-color: #9e52eb;" :disabled="!canEditStatus">Save Changes</button>
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button class="btn btn-primary" @click="handleSaveChanges" :disabled="!canEditStatus">Save Changes</button>
                 </div>
             </div>
         </div>
     </div>
+    <footer class="bg-light text-center py-3 small" style="margin-top: 20px">
+        © 2026 Trekking Management. All rights reserved.
+    </footer> 
 </template>
 
 <script>
@@ -190,6 +221,7 @@ export default {
         return {
             TrekDefault,
             treks: [],
+            bookings: [],
             searchQuery: '',
             searchField: 'trek_name',
             sortBy: '',
@@ -205,6 +237,17 @@ export default {
     computed: {
         canEditStatus() {
             return this.currentTrek && ['Approved', 'Open', 'Closed'].includes(this.currentTrek.status)
+        },
+        assignedTreksCount() {
+            return this.treks.length
+        },
+        ongoingTasksCount() {
+            return this.treks.filter(t => ['Open', 'Closed'].includes(t.status)).length
+        },
+        totalParticipants() {
+            return this.bookings
+                .filter(b => b.status === 'Booked')
+                .reduce((sum, b) => sum + (b.num_people || 0), 0)
         },
         filteredTreks() {
             let result = this.treks
@@ -232,6 +275,15 @@ export default {
         }
     },
     methods: {
+        formatDate(date) {
+            if (!date) return '';
+
+            return new Date(date).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+        },
         async fetchAssignedTreks() {
             try {
                 const token = localStorage.getItem('token')
@@ -241,6 +293,18 @@ export default {
                 this.treks = response.data
             } catch (error) {
                 console.error('Error fetching assigned treks:', error)
+            }
+        },
+        async fetchBookings() {
+            try {
+                const token = localStorage.getItem('token')
+                const response = await axios.get('http://127.0.0.1:5000/bookings', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                this.bookings = response.data
+            } catch (error) {
+                console.error('Error fetching bookings:', error)
+                this.bookings = []
             }
         },
         handleManageClick(trek) {
@@ -281,6 +345,7 @@ export default {
                 )
                 alert(response.data.msg)
                 await this.fetchAssignedTreks()
+                await this.fetchBookings()
                 this.closeModal()
             } catch (error) {
                 console.error('Error completing trek:', error)
@@ -290,6 +355,7 @@ export default {
         closeModal() {
             const modalEl = document.getElementById('staffTrekModal')
             const modal = bootstrap.Modal.getInstance(modalEl)
+            document.activeElement?.blur()
             if (modal) modal.hide()
             this.currentTrek = null
         },
@@ -303,12 +369,107 @@ export default {
     },
     mounted() {
         this.fetchAssignedTreks()
+        this.fetchBookings()
     }
 }
 </script>
 
 <style scoped>
+h2,h3 {
+    font-weight: 600;
+    color: #1b2430;
+    letter-spacing: -0.01em;
+    border-bottom: 2px solid #4169e1;
+    display: inline-block;
+}
+
 .btn {
     opacity: 1 !important;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: #4169e1;
+    border-color: #4169e1;
+}
+.btn-primary:hover {
+    background-color: #3457c4;
+    border-color: #3457c4;
+}
+
+.btn-outline-primary {
+    color: #4169e1;
+    border-color: #4169e1;
+}
+.btn-outline-primary:hover {
+    background-color: #4169e1;
+    border-color: #4169e1;
+    color: #fff;
+}
+
+.card {
+    border: 1px solid #dfe3ea;
+    border-radius: 8px;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+    border-color: #c7d1f2;
+    box-shadow: 0 4px 14px rgba(23, 43, 99, 0.08);
+}
+
+.card-title {
+    font-weight: 600;
+    color: #1b2430;
+}
+
+.card-text {
+    color: #4b5563;
+    font-size: 0.92rem;
+}
+
+.dropdown-menu {
+    border: 1px solid #dfe3ea;
+    box-shadow: 0 6px 18px rgba(23, 43, 99, 0.1);
+}
+
+.form-select:focus,
+.form-control:focus {
+    border-color: #4169e1;
+    box-shadow: 0 0 0 0.2rem rgba(65, 105, 225, 0.15);
+}
+
+.alert-info {
+    background-color: #eef1fc;
+    border-color: #d9e0f7;
+    color: #33415e;
+}
+
+.kpi-card {
+    border: 1px solid #dfe3ea;
+}
+
+.kpi-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1b2430;
+}
+
+.responsive-container {
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+@media (min-width: 992px) {
+    .responsive-container {
+        padding-left: 100px;
+        padding-right: 100px;
+    }
 }
 </style>

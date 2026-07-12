@@ -1,14 +1,10 @@
 <template>
     <div class="container mt-4">
         <form @submit.prevent="handleSubmit" class="row g-3">
-            <div class="col-12">
-                <h3 v-if="mode==='create'">Create Trek</h3>
-                <h3 v-else-if="mode==='edit'">Edit Trek</h3>
-                <h3 v-else>View Trek</h3>
-            </div>
 
             <div class="col-md-6">
-                <label for="trek_name" class="form-label">Trek Name</label>
+                <label for="trek_name" class="form-label" v-if="mode==='view'">Trek Name</label>
+                <label for="trek_name" class="form-label" v-else>Trek Name <span class="text-danger" style="text-align: right"><small>(required)</small></span></label>
                 <input v-model="form.trek_name" :disabled="isView || isStatusLocked" type="text" class="form-control" id="trek_name" required>
             </div>
 
@@ -43,7 +39,8 @@
             </div>
 
             <div class="col-md-4">
-                <label for="assigned_staff_id" class="form-label">Assign Staff</label>
+                <label for="assigned_staff_id" class="form-label" v-if="mode==='view'">Assigned Staff</label>
+                <label for="assigned_staff_id" class="form-label" v-else >Assign Staff</label>
                 <select v-model.number="form.assigned_staff_id" :disabled="isView || isStatusLocked" id="assigned_staff_id" class="form-select" >
                     <option value="">-- Select Staff --</option>
                     <option v-for="staff in availableStaff" :key="staff.user_id" :value="staff.user_id">
@@ -53,7 +50,8 @@
             </div>
 
             <div class="col-md-4">
-                <label for="status" class="form-label">Status</label>
+                <label for="status" class="form-label" v-if="mode==='view'">Current Status</label>
+                <label for="status" class="form-label" v-else >Status</label>                
                 <select v-model="form.status" :disabled="isView || isStatusLocked" id="status" class="form-select">
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
@@ -69,7 +67,7 @@
 
             <div class="col-md-6">
                 <label for="start_date" class="form-label">Start Date</label>
-                <input v-model="form.start_date" :disabled="isView || isStatusLocked" type="date" class="form-control" id="start_date"  :min="todayString">
+                <input v-model="form.start_date" :disabled="isView || isStatusLocked" type="date" class="form-control" id="start_date"  :min="tomorrowString">
             </div>
 
             <div class="col-md-6">
@@ -78,8 +76,10 @@
             </div>
 
             <div class="col-md-6">
-                <label class="form-label">Upload Images</label>
-                
+                <label class="form-label" v-if="mode==='view'">Uploaded Images</label>
+                <label class="form-label" v-else-if="mode==='edit'">Upload Images</label>
+                <label class="form-label" v-else >Upload Images</label>
+
                 <div class="d-flex flex-wrap gap-2 mb-2">
                     <div 
                         v-for="(img, index) in imagePreviews" 
@@ -107,7 +107,7 @@
             </div>
 
             <div class="col-12 text-center mt-3">
-                <button v-if="!isView && !isStatusLocked" type="submit" class="btn btn-primary me-2" style="background-color: #9e52eb;">{{ mode==='create' ? 'Create Trek' : 'Save Changes' }}</button>
+                <button v-if="!isView && !isStatusLocked" type="submit" class="btn btn-primary me-2" style="background-color: #4169e1;">{{ mode==='create' ? 'Create Trek' : 'Save Changes' }}</button>
                 <button type="button" class="btn btn-secondary" @click="handleCancel" style="background-color: #818285;">{{ isView ? 'Close' : 'Cancel' }}</button>
             </div>
         </form>
@@ -147,14 +147,15 @@ export default {
         isStatusLocked() {
             return this.trek && (this.trek.status === 'Completed' || this.trek.status === 'Cancelled')
         },
-        todayString() {
-            const today = new Date()
-            const offset = today.getTimezoneOffset()
-            const local = new Date(today.getTime() - offset * 60000)
+        tomorrowString() {
+            const tomorrow = new Date()
+            const offset = tomorrow.getTimezoneOffset()
+            const local = new Date(tomorrow.getTime() - offset * 60000)
+            local.setDate(local.getDate() + 1)   // ← added
             return local.toISOString().slice(0, 10)
         },
         endDateMin() {
-            return this.form.start_date || this.todayString
+            return this.form.start_date || this.tomorrowString
         },
         calculatedDuration() {
             if (!this.form.start_date || !this.form.end_date) return '0'
@@ -219,18 +220,20 @@ export default {
 
         async handleSubmit() {
             console.log("handleSubmit called", new Date().toISOString())
-            if (this.isSubmitting) return   // ← prevents double submit
+            if (this.isSubmitting) return
             this.isSubmitting = true
             
-            const today = new Date()
-            today.setHours(0, 0, 0, 0)
+            const tomorrow = new Date()
+            tomorrow.setHours(0, 0, 0, 0)
+            tomorrow.setDate(tomorrow.getDate() + 1)
+            
             const startDate = new Date(this.form.start_date)
             startDate.setHours(0, 0, 0, 0)
             const endDate = new Date(this.form.end_date)
             endDate.setHours(0, 0, 0, 0)
 
-            if (this.form.start_date && startDate < today) {
-                alert('Start date cannot be before today')
+            if (this.form.start_date && startDate < tomorrow) {
+                alert('Start date must be tomorrow or later')
                 this.isSubmitting = false
                 return
             }

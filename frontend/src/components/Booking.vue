@@ -2,28 +2,24 @@
     <div class="container mt-4">
         <form @submit.prevent="handleSubmit" class="row g-3">
 
-            <div class="col-12">
-                <h3 v-if="mode === 'create'">Book Trek</h3>
-                <h3 v-else-if="mode === 'edit'">Edit Booking</h3>
-                <h3 v-else>View Booking</h3>
-            </div>
-
-            <!-- ── Trek Info (read-only banner) ── -->
+            <!-- Trek info -->
             <div class="col-12" v-if="trek">
-                <div class="trek-banner">
-                    <div>
-                        <div class="trek-banner-name">{{ trek.trek_name }}</div>
-                        <div class="trek-banner-meta">
-                            📍 {{ trek.location }} &nbsp;·&nbsp;
-                            🏔️ {{ trek.difficulty }} &nbsp;·&nbsp;
-                            📅 {{ trek.start_date }} → {{ trek.end_date }}
+                <div class="card">
+                    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="fw-bold">{{ trek.trek_name }}</div>
+                            <div class="text-muted small">
+                                {{ trek.location }} · {{ trek.difficulty }} · {{ trek.start_date }} to {{ trek.end_date }}
+                            </div>
+                        </div>
+                        <div class="fs-4 fw-bold" style="color: #4169e1;">
+                            ₹{{ trek.price }}<span class="fs-6 fw-normal text-muted"> /person</span>
                         </div>
                     </div>
-                    <div class="trek-banner-price">₹{{ trek.price }}<span>/person</span></div>
                 </div>
             </div>
 
-            <!-- ── View mode: booking meta ── -->
+            <!-- View mode: booking meta -->
             <template v-if="isView && booking">
                 <div class="col-md-4">
                     <label class="form-label">Booking ID</label>
@@ -47,7 +43,7 @@
                 </div>
             </template>
 
-            <!-- ── Participants section heading ── -->
+            <!-- Participants heading -->
             <div class="col-12 d-flex justify-content-between align-items-center mt-2">
                 <label class="form-label fw-bold mb-0">Participants</label>
                 <button
@@ -55,94 +51,105 @@
                     type="button"
                     class="btn btn-sm btn-outline-secondary"
                     @click="addParticipant"
-                    :disabled="form.participants.length >= ((trek?.available_slots || 0) + (isEdit ? booking?.num_people || 0 : 0))"
+                    :disabled="form.participants.length >= maxParticipants"
                 >
                     + Add Participant
                 </button>
             </div>
-
-            <!-- ── Empty state ── -->
-            <div class="col-12" v-if="form.participants.length === 0">
-                <div class="empty-participants">
-                    <span v-if="!isView">Click <strong>+ Add Participant</strong> to begin.</span>
-                    <span v-else>No participants on record.</span>
+            <div class="col-12" v-if="!isView && maxParticipants > 0 && form.participants.length >= maxParticipants">
+                <div class="text-danger small">
+                    No available slots — you can't add more participants to this trek.
                 </div>
             </div>
 
-            <!-- ── Participant rows ── -->
+            <!-- Empty state -->
+            <div class="col-12" v-if="form.participants.length === 0">
+                <div class="border rounded text-center text-muted p-3">
+                    <span v-if="isView">No participants on record.</span>
+                    <span v-else-if="maxParticipants === 0">No available slots for this trek.</span>
+                    <span v-else>Click <strong>+ Add Participant</strong> to begin.</span>
+                </div>
+            </div>
+
+            <!-- Participant rows -->
             <div
                 v-for="(p, i) in form.participants"
                 :key="i"
-                class="col-12 participant-card"
+                class="col-12"
             >
-                <div class="participant-card-header">
-                    <span>Person {{ i + 1 }}</span>
-                    <button
-                        v-if="!isView"
-                        type="button"
-                        class="btn-remove"
-                        @click="removeParticipant(i)"
-                    >✕ Remove</button>
-                </div>
-                <div class="row g-2 mt-1">
-                    <div class="col-md-4">
-                        <label class="form-label">Full Name <span v-if="!isView" class="text-danger">*</span></label>
-                        <input
-                            v-model="p.name"
-                            :disabled="isView"
-                            type="text"
-                            class="form-control"
-                            placeholder="As per Aadhar"
-                        >
-                        <div v-if="errors[i]?.name" class="field-error">{{ errors[i].name }}</div>
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-semibold small">Person {{ i + 1 }}</span>
+                        <button
+                            v-if="!isView"
+                            type="button"
+                            class="btn btn-sm btn-link text-danger text-decoration-none p-0"
+                            @click="removeParticipant(i)"
+                            style="background: transparent; border: none;"
+                        >Remove</button>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Date of Birth <span v-if="!isView" class="text-danger">*</span></label>
-                        <input
-                            v-model="p.dob"
-                            :disabled="isView"
-                            type="date"
-                            class="form-control"
-                            :max="todayString"
-                        >
-                        <div v-if="errors[i]?.dob" class="field-error">{{ errors[i].dob }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Aadhar Number <span v-if="!isView" class="text-danger">*</span></label>
-                        <input
-                            v-model="p.aadhar"
-                            :disabled="isView"
-                            type="text"
-                            class="form-control"
-                            placeholder="12-digit number"
-                            maxlength="12"
-                            @input="p.aadhar = p.aadhar.replace(/\D/g, '')"
-                        >
-                        <div v-if="errors[i]?.aadhar" class="field-error">{{ errors[i].aadhar }}</div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label">Full Name <span v-if="!isView" class="text-danger">*</span></label>
+                                <input
+                                    v-model="p.name"
+                                    :disabled="isView"
+                                    type="text"
+                                    class="form-control"
+                                    placeholder="As per Aadhar"
+                                >
+                                <div v-if="errors[i]?.name" class="form-text text-danger">{{ errors[i].name }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Date of Birth <span v-if="!isView" class="text-danger">*</span></label>
+                                <input
+                                    v-model="p.dob"
+                                    :disabled="isView"
+                                    type="date"
+                                    class="form-control"
+                                    :max="todayString"
+                                >
+                                <div v-if="errors[i]?.dob" class="form-text text-danger">{{ errors[i].dob }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Aadhar Number <span v-if="!isView" class="text-danger">*</span></label>
+                                <input
+                                    v-model="p.aadhar"
+                                    :disabled="isView"
+                                    type="text"
+                                    class="form-control"
+                                    placeholder="12-digit number"
+                                    maxlength="12"
+                                    @input="p.aadhar = p.aadhar.replace(/\D/g, '')"
+                                >
+                                <div v-if="errors[i]?.aadhar" class="form-text text-danger">{{ errors[i].aadhar }}</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ── Cost summary ── -->
+            <!-- Cost summary -->
             <div class="col-12" v-if="!isView && form.participants.length > 0">
-                <div class="cost-summary">
-                    <span>{{ form.participants.length }} × ₹{{ trek?.price || 0 }}</span>
-                    <span class="cost-total">Total: ₹{{ totalCost }}</span>
+                <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                    <span class="text-muted">{{ form.participants.length }} × ₹{{ trek?.price || 0 }}</span>
+                    <span class="fs-5 fw-bold" style="color: #4169e1;">Total: ₹{{ totalCost }}</span>
                 </div>
             </div>
 
-            <!-- ── Error banner ── -->
+            <!-- Error banner -->
             <div class="col-12" v-if="submitError">
                 <div class="alert alert-danger py-2 mb-0">{{ submitError }}</div>
             </div>
 
-            <!-- ── Action buttons ── -->
+            <!-- Action buttons -->
             <div class="col-12 text-center mt-3">
                 <template v-if="!isView">
                     <button
                         type="submit"
                         class="btn btn-primary me-2"
-                        style="background-color: #9e52eb;"
+                        style="background-color: #4169e1;"
                         :disabled="isSubmitting || form.participants.length === 0"
                     >
                         <span v-if="isSubmitting && lastAction === 'save'"
@@ -161,7 +168,6 @@
                         Book &amp; Pay
                     </button>
 
-                    <!-- NEW: Delete only in edit mode -->
                     <button
                         v-if="isEdit && booking"
                         type="button"
@@ -172,7 +178,6 @@
                     >
                         Delete Booking
                     </button>
-
                 </template>
 
                 <button type="button" class="btn btn-secondary" @click="handleCancel"
@@ -214,6 +219,10 @@ export default {
     computed: {
         isView() { return this.mode === 'view' },
         isEdit() { return this.mode === 'edit' },
+
+        maxParticipants() {
+            return (this.trek?.available_slots || 0) + (this.isEdit ? (this.booking?.num_people || 0) : 0)
+        },
 
         todayString() {
             const today = new Date()
@@ -389,101 +398,6 @@ export default {
 </script>
 
 <style scoped>
-/* Trek banner */
-.trek-banner {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: linear-gradient(135deg, #f3edff 0%, #e8f4fd 100%);
-    border-left: 4px solid #9e52eb;
-    border-radius: 8px;
-    padding: 14px 18px;
-    gap: 12px;
-}
-.trek-banner-name {
-    font-weight: 700;
-    font-size: 1.05rem;
-    color: #2d2d2d;
-}
-.trek-banner-meta {
-    font-size: 0.82rem;
-    color: #666;
-    margin-top: 4px;
-}
-.trek-banner-price {
-    font-size: 1.4rem;
-    font-weight: 800;
-    color: #9e52eb;
-    white-space: nowrap;
-}
-.trek-banner-price span {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: #888;
-}
-
-/* Empty state */
-.empty-participants {
-    background: #fafafa;
-    border: 1.5px dashed #ccc;
-    border-radius: 8px;
-    text-align: center;
-    padding: 18px;
-    color: #888;
-    font-size: 0.9rem;
-}
-
-/* Participant card */
-.participant-card {
-    background: #fff;
-    border: 1px solid #e4d9f9;
-    border-radius: 10px;
-    padding: 14px 16px 10px;
-}
-.participant-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.82rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #9e52eb;
-}
-.btn-remove {
-    background: none;
-    border: none;
-    color: #dc3545;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-}
-.btn-remove:hover { color: #a71d2a; }
-
-.field-error {
-    color: #dc3545;
-    font-size: 0.75rem;
-    margin-top: 3px;
-}
-
-/* Cost summary */
-.cost-summary {
-    background: #f8f5ff;
-    border-radius: 8px;
-    padding: 10px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.95rem;
-    color: #555;
-}
-.cost-total {
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: #9e52eb;
-}
-
 /* Disable opacity fix (matches Trek.vue) */
 .btn-primary, .btn-secondary, .btn-success {
     opacity: 1 !important;

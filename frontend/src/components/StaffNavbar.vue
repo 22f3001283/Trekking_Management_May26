@@ -1,7 +1,7 @@
 <template>
   <nav class="navbar navbar-light bg-light fixed-top">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">Staff Dashboard</a>
+      <a class="navbar-brand" href="#">Welcome! {{ username }} - Staff</a>
       <div class="d-flex gap-3 align-items-center">
         <div class="icon-wrap">
           <button class="icon-btn" @click="signOut">
@@ -16,11 +16,18 @@
 
 <script>
 export default {
+  data() {
+    return {
+      username: localStorage.getItem('username')
+    }
+  },
   methods: {
     signOut() {
+      if (!confirm('Are you sure you want to sign out?')) return
       localStorage.removeItem('token')
       localStorage.removeItem('user_id')
       localStorage.removeItem('role')
+      localStorage.removeItem('username')
       this.$router.push('/login')
     }
   }

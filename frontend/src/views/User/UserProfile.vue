@@ -1,14 +1,14 @@
 <template>
-  <div class="profile-page">
+  <div>
     <UserNavbar />
 
-    <div class="container profile-container">
+    <div class="container" style="padding-top: 90px; padding-bottom: 60px;">
       <div class="row justify-content-center">
         <div class="col-lg-7 col-md-9">
 
           <!-- Loading state -->
           <div v-if="loading" class="text-center py-5">
-            <div class="spinner-border text-purple" role="status">
+            <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Loading...</span>
             </div>
           </div>
@@ -19,47 +19,52 @@
           </div>
 
           <!-- Profile card -->
-          <div v-else class="card profile-card shadow-sm">
-            <div class="card-header-purple">
-              <div class="avatar-circle">
+          <div v-else class="card border-0 shadow-sm">
+            <div class="card-header d-flex align-items-center gap-3 py-4 px-4" style="background-color: lightblue;">
+              <div class="rounded-circle bg-white d-flex align-items-center justify-content-center fw-semibold flex-shrink-0"
+                   style="width: 56px; height: 56px; font-size: 1.1rem;">
                 {{ initials }}
               </div>
-              <div class="header-text">
-                <h4 class="mb-0">{{ profile.username }}</h4>
-                <span class="role-badge">{{ profile.role }}</span>
+              <div class="flex-grow-1">
+                <h4 class="mb-1">{{ profile.username }}</h4>
+                <span class="badge text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">
+                  {{ profile.role }}
+                </span>
               </div>
-              <button class="btn btn-edit" @click="openEditModal">
+              <button class="btn btn-light btn-sm flex-shrink-0" @click="openEditModal">
                 <i class="bi bi-pencil-square me-1"></i> Edit
               </button>
             </div>
 
-            <div class="card-body">
-              <div class="detail-row">
-                <span class="detail-label">Username</span>
-                <span class="detail-value">{{ profile.username }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Email</span>
-                <span class="detail-value">{{ profile.email }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Contact</span>
-                <span class="detail-value">{{ profile.contact || '—' }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Role</span>
-                <span class="detail-value text-capitalize">{{ profile.role }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Status</span>
-                <span class="detail-value">
-                  <span :class="['status-pill', statusClass]">{{ profile.status }}</span>
-                </span>
-              </div>
-              <div class="detail-row" v-if="profile.created_at">
-                <span class="detail-label">Member Since</span>
-                <span class="detail-value">{{ formattedDate }}</span>
-              </div>
+            <div class="card-body p-4">
+              <form>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Username</label>
+                    <input type="text" class="form-control" :value="profile.username" disabled>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Email</label>
+                    <input type="text" class="form-control" :value="profile.email" disabled>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Contact</label>
+                    <input type="text" class="form-control" :value="profile.contact || '—'" disabled>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Role</label>
+                    <input type="text" class="form-control text-capitalize" :value="profile.role" disabled>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Status</label>
+                    <input type="text" class="form-control text-capitalize fw-semibold" :class="statusClass" :value="profile.status" disabled>
+                  </div>
+                  <div class="col-md-6" v-if="profile.created_at">
+                    <label class="form-label text-muted small text-uppercase" style="letter-spacing: 0.04em;">Member Since</label>
+                    <input type="text" class="form-control" :value="formattedDate" disabled>
+                  </div>
+                </div>
+              </form>
             </div>
           </div>
 
@@ -77,7 +82,7 @@
       ref="editModalEl"
     >
       <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content modal-purple">
+        <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="editProfileModalLabel">Edit Profile</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -93,7 +98,7 @@
                 <label class="form-label">Username</label>
                 <input
                   type="text"
-                  class="form-control input-purple"
+                  class="form-control"
                   v-model.trim="form.username"
                   required
                 />
@@ -103,7 +108,7 @@
                 <label class="form-label">Email</label>
                 <input
                   type="email"
-                  class="form-control input-purple"
+                  class="form-control"
                   v-model.trim="form.email"
                   required
                 />
@@ -113,7 +118,7 @@
                 <label class="form-label">Contact</label>
                 <input
                   type="text"
-                  class="form-control input-purple"
+                  class="form-control"
                   v-model.trim="form.contact"
                   placeholder="Phone number"
                 />
@@ -126,7 +131,7 @@
                 <label class="form-label">Current Password</label>
                 <input
                   type="password"
-                  class="form-control input-purple"
+                  class="form-control"
                   v-model="form.current_password"
                   autocomplete="current-password"
                 />
@@ -136,7 +141,7 @@
                 <label class="form-label">New Password</label>
                 <input
                   type="password"
-                  class="form-control input-purple"
+                  class="form-control"
                   v-model="form.new_password"
                   autocomplete="new-password"
                 />
@@ -148,7 +153,7 @@
               <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                 Cancel
               </button>
-              <button type="submit" class="btn btn-save" :disabled="saving">
+              <button type="submit" class="btn btn-primary" :disabled="saving">
                 <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
                 Save Changes
               </button>
@@ -160,7 +165,6 @@
     </div>
   </div>
 </template>
-
 <script>
 import axios from 'axios'
 import UserNavbar from '../../components/UserNavbar.vue'
@@ -193,9 +197,9 @@ export default {
     },
     statusClass() {
       const s = (this.profile.status || '').toLowerCase()
-      if (s === 'active') return 'status-active'
-      if (s === 'blacklisted') return 'status-blacklisted'
-      return ''
+      if (s === 'active') return 'text-success'
+      if (s === 'blacklisted') return 'text-danger'
+      return 'text-body'
     },
     formattedDate() {
       if (!this.profile.created_at) return ''
@@ -277,153 +281,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-.profile-page {
-  background-color: #faf7fe;
-  min-height: 100vh;
-}
-
-.profile-container {
-  padding-top: 90px;
-  padding-bottom: 60px;
-}
-
-.text-purple {
-  color: #9e52eb;
-}
-
-/* Card */
-.profile-card {
-  border: none;
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.card-header-purple {
-  background: linear-gradient(135deg, #9e52eb 0%, #7c3fc2 100%);
-  color: #fff;
-  padding: 28px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.avatar-circle {
-  width: 56px;
-  height: 56px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-.header-text {
-  flex-grow: 1;
-}
-
-.role-badge {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background-color: rgba(255, 255, 255, 0.22);
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-.btn-edit {
-  background-color: #fff;
-  color: #7c3fc2;
-  border: none;
-  font-weight: 500;
-  border-radius: 8px;
-  padding: 6px 16px;
-  flex-shrink: 0;
-}
-
-.btn-edit:hover {
-  background-color: #f3edff;
-  color: #5b2ea0;
-}
-
-/* Detail rows */
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 4px;
-  border-bottom: 1px solid #f1eafc;
-}
-
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-label {
-  color: #8a8a8a;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.detail-value {
-  font-weight: 500;
-  color: #2d2d2d;
-}
-
-/* Status pill */
-.status-pill {
-  font-size: 0.75rem;
-  padding: 3px 12px;
-  border-radius: 12px;
-  text-transform: capitalize;
-  font-weight: 500;
-}
-
-.status-active {
-  background-color: #e8f8ee;
-  color: #1f9d55;
-}
-
-.status-blacklisted {
-  background-color: #fde8e8;
-  color: #c43030;
-}
-
-/* Modal */
-.modal-purple .modal-header {
-  background-color: #f3edff;
-  border-bottom: 1px solid #e6d8fb;
-}
-
-.modal-purple .modal-title {
-  color: #7c3fc2;
-  font-weight: 600;
-}
-
-.input-purple:focus {
-  border-color: #9e52eb;
-  box-shadow: 0 0 0 0.2rem rgba(158, 82, 235, 0.15);
-}
-
-.btn-save {
-  background-color: #9e52eb;
-  border: none;
-  color: #fff;
-  font-weight: 500;
-}
-
-.btn-save:hover {
-  background-color: #7c3fc2;
-}
-
-.btn-save:disabled {
-  background-color: #c9a3ee;
-}
-</style>

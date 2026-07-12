@@ -1,127 +1,16 @@
 <template>
     <UserNavbar />
 
-        <!-- ══════════════════ AVAILABLE TREKS ══════════════════ -->
-    <div class="container-fluid responsive-container" style="margin-top: 100px;">
-
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-            <h2 class="mb-0">Available Treks</h2>        
-            <div class="d-flex flex-column flex-sm-row gap-2 mb-3 align-items-right justify-content-end">
-                <div class="input-group" style="max-width: 370px;">
-                    <input class="form-control" type="search" v-model="searchQuery"
-                        :placeholder="'Search by ' + searchField.replace('_', ' ') + '...'" aria-label="Search">
-                    <select class="form-select" v-model="searchField" style="max-width: 150px;">
-                        <option value="trek_name">Trek Name</option>
-                        <option value="location">Location</option>
-                        <option value="difficulty">Difficulty</option>
-                        <option value="price">Price</option>
-                        <option value="available_slots">Available Slots</option>
-                        <option value="assigned_staff_name">Guide</option>
-                    </select>
-                </div>
-
-                <div class="dropdown">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                        <i class="bi bi-sort-alpha-down"></i> Sort
-                    </button>
-                    <div class="dropdown-menu p-3" style="min-width: 220px;">
-                        <label class="form-label fw-bold">Sort By</label>
-                        <select class="form-select" v-model="sortBy">
-                            <option value="">None</option>
-                            <option value="price_asc">Price: Low to High</option>
-                            <option value="price_desc">Price: High to Low</option>
-                            <option value="duration">Duration</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="dropdown">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                        <i class="bi bi-funnel"></i> Filter
-                    </button>
-                    <div class="dropdown-menu p-3" style="min-width: 280px;">
-                        <label class="form-label fw-bold">Difficulty</label>
-                        <select class="form-select mb-3" v-model="filterDifficulty">
-                            <option value="">All</option>
-                            <option value="Easy">Easy</option>
-                            <option value="Moderate">Moderate</option>
-                            <option value="Hard">Hard</option>
-                        </select>
-                        <label class="form-label fw-bold">Price Range</label>
-                        <div class="d-flex gap-2 mb-3">
-                            <input class="form-control" type="number" v-model="filterMinPrice" placeholder="Min">
-                            <input class="form-control" type="number" v-model="filterMaxPrice" placeholder="Max">
-                        </div>
-                        <button class="btn btn-outline-danger w-100" @click="resetFilters">Reset Filters</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div v-if="filteredTreks.length > 0" class="row g-4 ">
-            <div v-for="trek in filteredTreks" :key="trek.trek_id" class="col-md-4 col-lg-3">
-                <div class="card h-100">
-                    <div v-if="trek.images && trek.images.filter(img => img.startsWith('data:')).length > 0">
-                        <div :id="'carousel-' + trek.trek_id" class="carousel slide" data-bs-ride="carousel">
-                            <div class="carousel-inner">
-                                <div v-for="(img, index) in trek.images.filter(img => img.startsWith('data:'))"
-                                    :key="index" :class="['carousel-item', index === 0 ? 'active' : '']">
-                                    <img :src="img" class="d-block w-100" style="height: 180px; object-fit: cover;">
-                                </div>
-                            </div>
-                            <template v-if="trek.images.filter(img => img.startsWith('data:')).length > 1">
-                                <button class="carousel-control-prev" type="button"
-                                    :data-bs-target="'#carousel-' + trek.trek_id" data-bs-slide="prev">
-                                    <span class="carousel-control-prev-icon"></span>
-                                </button>
-                                <button class="carousel-control-next" type="button"
-                                    :data-bs-target="'#carousel-' + trek.trek_id" data-bs-slide="next">
-                                    <span class="carousel-control-next-icon"></span>
-                                </button>
-                            </template>
-                        </div>
-                    </div>
-                    <img v-else :src="TrekDefault" class="card-img-top" style="height: 180px; object-fit: cover;">
-
-                    <div class="card-body">
-                        <h5 class="card-title">{{ trek.trek_name }}</h5>
-                        <p class="card-text">
-                            <strong>Location:</strong> {{ trek.location }}<br>
-                            <strong>Difficulty:</strong> {{ trek.difficulty }}<br>
-                            <strong>Dates:</strong> {{ formatDate(trek.start_date) }} - {{ formatDate(trek.end_date) }} ({{ trek.duration_days }} days)<br>
-                            <strong>Guide:</strong> {{ trek.assigned_staff_name || 'Not assigned' }}<br>
-                            <strong>Available Slots:</strong> {{ trek.available_slots }}<br>
-                            <strong>Price:</strong> ₹{{ trek.price }}/person<br>
-                        </p>
-                        <div class="d-flex gap-2 align-items-center">
-                            <button class="btn btn-sm btn-outline-primary"
-                                @click="handleViewClick(trek)"
-                                data-bs-toggle="modal"
-                                data-bs-target="#trekModal">
-                                View
-                            </button>
-                            <button 
-                                v-if="trek.status === 'Open'"
-                                class="btn btn-sm btn-success"
-                                @click="handleBookClick(trek)">
-                                Book
-                            </button>
-                            <span v-else-if="trek.status === 'Approved'" class="text-muted small">
-                                Available for booking soon...
-                            </span>                            
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div v-else class="alert alert-info mt-3">No treks available at the moment.</div>
-    </div>
-
-    <div class="container-fluid  responsive-container" style="margin-top: 50px;">
+    <div class="container-fluid  responsive-container" style="margin-top: 100px;">
 
         <!-- ══════════════════ BOOKED TREKS ══════════════════ -->
-
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-sm btn-primary" @click="exportHistory">
+                <i class="bi bi-download"></i>   Export Booking History
+            </button>
+        </div>
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-            <h2 class="mb-0">My Booked Treks</h2>
+            <h2 class="mb-0">My Bookings</h2>
             <!-- Booked Treks Search/Sort/Filter -->
             <div class="d-flex flex-column flex-sm-row gap-2 mb-3 align-items-right justify-content-end">
                 <div class="input-group" style="max-width: 370px;">
@@ -130,6 +19,7 @@
                     <select class="form-select" v-model="bookedSearchField" style="max-width: 180px;">
                         <option value="trek_name">Trek Name</option>
                         <option value="booking_date">Date</option>
+                        <option value="status">Booking Status</option>
                         <option value="payment_status">Payment Status</option>
                     </select>
                 </div>
@@ -157,6 +47,13 @@
                         <i class="bi bi-funnel"></i> Filter
                     </button>
                     <div class="dropdown-menu p-3" style="min-width: 260px;">
+                        <label class="form-label fw-bold">Booking Status</label>
+                        <select class="form-select mb-3" v-model="bookedFilterStatus">
+                            <option value="">All</option>
+                            <option value="Booked">Booked</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
                         <label class="form-label fw-bold">Payment Status</label>
                         <select class="form-select mb-3" v-model="bookedFilterPayment">
                             <option value="">All</option>
@@ -167,48 +64,40 @@
                         <button class="btn btn-outline-danger w-100" @click="resetBookedFilters">Reset Filters</button>
                     </div>
                 </div>
-            </div>
+            </div>            
         </div>
 
-        <div v-if="filteredBookings.length > 0" class="card border-0 shadow-sm mb-5">
-            <div class="table-responsive">
-                <table class="table align-middle mb-0">
-                    <thead class="table-primary">
-                        <tr>
-                            <th>Trek</th>
-                            <th>Booked On</th>
-                            <th>Trek Dates</th>
-                            <th>Payment</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="b in filteredBookings" :key="b.booking_id">
-                            <td class="fw-semibold">{{ getTrekName(b.trek_id) }}</td>
-                            <td class="text-muted small">{{ formatDate(b.booking_date) }}</td>
-                            <td class="text-muted small">{{ getTrekById(b.trek_id)?.start_date || '—' }} to {{ getTrekById(b.trek_id)?.end_date || '—' }}</td>
-                            <td><span class="text-muted small">{{ b.payment_status }}</span></td>
-                            <td>
-                                <div class="d-flex gap-2 flex-wrap">
-                                    <button class="btn btn-sm btn-outline-primary"
-                                        @click="handleViewTrekClick(b)"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#trekModal">
-                                        View Trek
-                                    </button>
-                                    <button v-if="b.trek?.status === 'Open'"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        @click="handleEditBookingClick(b)">
-                                        Edit Booking
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div v-if="filteredBookings.length > 0" class="row g-3 mb-5">
+            <div v-for="b in filteredBookings" :key="b.booking_id" class="col-md-4 col-lg-3">
+                <div class="card h-100 booked-card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ getTrekName(b.trek_id) }}</h5>
+                        <p class="card-text">
+                            <strong>Booked On:</strong> {{ formatDate(b.booking_date) }}<br>
+                            <strong>Trek Dates:</strong> {{ getTrekById(b.trek_id)?.start_date || '—' }} → {{ getTrekById(b.trek_id)?.end_date || '—' }}<br>
+                            <strong>Status:</strong>
+                            <span :class="bookingStatusClass(b.status)">{{ b.status }}</span><br>
+                            <strong>Payment:</strong>
+                            <span :class="paymentStatusClass(b.payment_status)">{{ b.payment_status }}</span>
+                        </p>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-outline-primary"
+                                @click="handleViewTrekClick(b)"
+                                data-bs-toggle="modal"
+                                data-bs-target="#trekModal">
+                                View Trek
+                            </button>
+                            <button v-if="b.status !== 'Completed' && b.trek?.status === 'Open'"
+                                class="btn btn-sm btn-outline-secondary"
+                                @click="handleEditBookingClick(b)">
+                                Edit Booking
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div v-else class="alert alert-info mb-5">No active bookings found.</div>
+        <div v-else class="alert alert-info mb-5">No bookings found.</div>
     </div>
     <!-- Booking Modal -->
     <div class="modal fade" id="bookingModal" tabindex="-1">
@@ -288,6 +177,7 @@ export default {
             bookedSearchQuery: '',
             bookedSearchField: 'trek_name',
             bookedSortBy: 'date_desc',
+            bookedFilterStatus: '',
             bookedFilterPayment: '',
 
             // Modal state
@@ -319,9 +209,9 @@ export default {
             return result
         },
 
-        // ── Booked treks (Booked status only) ──
+        // ── Booked treks ──
         filteredBookings() {
-            let result = this.userBookings.filter(b => b.status === 'Booked')
+            let result = [...this.userBookings]
 
             if (this.bookedSearchQuery) {
                 const q = this.bookedSearchQuery.toLowerCase()
@@ -335,6 +225,8 @@ export default {
                 })
             }
 
+            if (this.bookedFilterStatus)
+                result = result.filter(b => b.status === this.bookedFilterStatus)
             if (this.bookedFilterPayment)
                 result = result.filter(b => b.payment_status === this.bookedFilterPayment)
 
@@ -503,6 +395,7 @@ export default {
             this.bookedSearchQuery   = ''
             this.bookedSearchField   = 'trek_name'
             this.bookedSortBy        = 'date_desc'
+            this.bookedFilterStatus  = ''
             this.bookedFilterPayment = ''
         },
 
@@ -520,6 +413,21 @@ export default {
             return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
         },
 
+        bookingStatusClass(status) {
+            return {
+                'text-success fw-bold': status === 'Booked',
+                'text-danger fw-bold':  status === 'Cancelled',
+                'text-primary fw-bold': status === 'Completed',
+            }
+        },
+
+        paymentStatusClass(status) {
+            return {
+                'text-success fw-bold': status === 'Paid',
+                'text-warning fw-bold': status === 'Pending',
+                'text-danger fw-bold':  status === 'Refund',
+            }
+        },
     },
     mounted() {
         this.fetchTreks()
@@ -568,10 +476,13 @@ h2 {
     border-radius: 8px;
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
-
 .card:hover {
     border-color: #c7d1f2;
     box-shadow: 0 4px 14px rgba(23, 43, 99, 0.08);
+}
+
+.booked-card {
+    border: 1px solid #dfe3ea;
 }
 
 .card-title {
@@ -599,20 +510,6 @@ h2 {
     background-color: #eef1fc;
     border-color: #d9e0f7;
     color: #33415e;
-}
-
-.table-head-brand th {
-    background-color: #eef1fc;
-    color: #2d3f8c;
-    text-transform: uppercase;
-    font-size: 0.72rem;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-    border-bottom: none;
-}
-
-.table > :not(caption) > * > * {
-    padding: 0.85rem 1rem;
 }
 
 .responsive-container {

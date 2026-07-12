@@ -92,7 +92,8 @@ celery = init_celery(app)
 #---------------------------------------------------Export Path--------------------------------------------------------------------------------
 EXPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
 os.makedirs(EXPORT_DIR, exist_ok=True)
-###################################  decorator  ############################################################################# #
+
+###########################################################  decorators ############################################################################# #
 
 def get_current_user():
     username = get_jwt_identity()
@@ -116,7 +117,7 @@ def trek_is_complete(trek):
     ]
     return all(v is not None for v in required_values)
 
-##################################  API ROUTES  ###############################################
+####################################################################  API ROUTES  #######################################################################
 
 @app.route('/api',methods=['POST'])
 def hello_world():
@@ -138,17 +139,16 @@ def debug_me():
 def user():
     return "Welcome to User Dashboard"
 
-##################################  Resources   ##################################################
-
-class Hello(Resource):
-    # @cross_origin()
-    # @jwt_required()
-    def get(self):
-        # user_name=get_jwt_identity()
-        return  {"msg" : "hello world"}
+###############################################################  Resources ##################################################################################################
     
-##################################  Authentication ###############################################
+# Create-->post; Read-->get; Update-->put; Delete-->delete
 
+# -----------------------------------------------------  Authentication --------------------------------------------------------------------------
+
+class Home(Resource):
+    def get(self):
+        return  {"msg" : "Hello there! You are viewing Trekking Management Application"}
+    
 class LoginResource(Resource):
     def post(self):
         data = request.get_json()
@@ -197,9 +197,181 @@ class SignupResource(Resource):
         response = jsonify({"username": username, "email": email, "msg": "user created correctly"})
         return make_response(response, 200)
 
-# ######################################################################################################################################################## #
 
-# Create-->post; Read-->get; Update-->put; Delete-->delete
+#--------------------------------------------------------------------Public Stats------------------------------------------------------------
+
+class PublicStatsResource(Resource):
+    """
+    GET /public/stats — no auth required, safe for the homepage.
+    Only exposes aggregate, non-identifying numbers.
+    """
+    @cache.cached(timeout=600, key_prefix="public_stats")
+    def get(self):
+        today = date.today()
+        current_year = today.year
+
+        # ---- de-dup: latest booking per (user, trek), same logic as admin stats ----
+        latest_booking_ids_sq = (
+            db.session.query(func.max(Booking.booking_id).label("booking_id"))
+            .group_by(Booking.user_id, Booking.trek_id)
+            .subquery()
+        )
+        latest_only = Booking.booking_id.in_(
+            db.session.query(latest_booking_ids_sq.c.booking_id)
+        )
+
+        # ---- % of treks completed ----
+        total_treks_ever = Trek.query.count()
+        completed_treks = Trek.query.filter_by(status=TrekStatus.COMPLETED).count()
+        completion_rate = round((completed_treks / total_treks_ever * 100), 1) if total_treks_ever else 0
+
+        # ---- available / upcoming treks right now ----
+        upcoming_treks = Trek.query.filter(
+            Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED])
+        ).count()
+
+        # ---- unique participants (distinct aadhar, from active bookings only) ----
+        unique_participants = (
+            db.session.query(func.count(func.distinct(Participant.aadhar)))
+            .join(Booking, Booking.booking_id == Participant.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .scalar()
+        ) or 0
+
+        # ---- unique treks offered (by name) & unique destinations ----
+        unique_trek_names = db.session.query(func.count(func.distinct(Trek.trek_name))).scalar() or 0
+        unique_destinations = (
+            db.session.query(func.count(func.distinct(Trek.location)))
+            .filter(Trek.location.isnot(None))
+            .scalar()
+        ) or 0
+
+        # ---- difficulty mix, currently open/approved only ----
+        diff_rows = (
+            db.session.query(Trek.difficulty, func.count(Trek.trek_id))
+            .filter(Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED]))
+            .filter(Trek.difficulty.isnot(None))
+            .group_by(Trek.difficulty)
+            .all()
+        )
+        difficulty_mix = {d: c for d, c in diff_rows}
+
+        # ---- treks conducted: this year vs last year (by start_date, COMPLETED only) ----
+        treks_this_year = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('year', Trek.start_date) == current_year,
+        ).count()
+        treks_last_year = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('year', Trek.start_date) == current_year - 1,
+        ).count()
+
+        # ---- busiest month (calendar month, across all years, COMPLETED treks) ----
+        month_rows = (
+            db.session.query(
+                extract('month', Trek.start_date).label('m'),
+                func.count(Trek.trek_id).label('cnt'),
+            )
+            .filter(Trek.status == TrekStatus.COMPLETED, Trek.start_date.isnot(None))
+            .group_by('m')
+            .order_by(func.count(Trek.trek_id).desc())
+            .first()
+        )
+        month_names = ["", "January", "February", "March", "April", "May", "June",
+                       "July", "August", "September", "October", "November", "December"]
+        busiest_month = month_names[int(month_rows.m)] if month_rows else None
+
+        # ---- average treks per month, last 12 months ----
+        twelve_months_ago = today - timedelta(days=365)
+        recent_trek_count = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            Trek.start_date >= twelve_months_ago,
+        ).count()
+        avg_treks_per_month = round(recent_trek_count / 12, 1)
+
+        # ---- total participant-days delivered (completed treks only) ----
+        participant_days_scalar = (
+            db.session.query(func.sum(Trek.duration_days * Booking.num_people if False else 1))
+            .scalar()
+        )
+        # duration_days * participant count, summed across completed bookings on completed treks
+        pd_rows = (
+            db.session.query(Trek.duration_days, Booking.booking_id)
+            .join(Booking, Booking.trek_id == Trek.trek_id)
+            .filter(Trek.status == TrekStatus.COMPLETED, Booking.status == BookingStatus.COMPLETED)
+            .filter(latest_only)
+            .all()
+        )
+        participant_counts = dict(
+            db.session.query(Participant.booking_id, func.count(Participant.participant_id))
+            .group_by(Participant.booking_id).all()
+        )
+        total_participant_days = sum(
+            (dur or 0) * participant_counts.get(bid, 0) for dur, bid in pd_rows
+        )
+
+        # ---- growth trends: participants & treks over time (monthly) ----
+        participant_growth_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Booking.booking_date).label("month"),
+                func.count(Participant.participant_id).label("cnt"),
+            )
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+        trek_growth_rows = (
+            db.session.query(
+                func.strftime("%Y-%m", Trek.created_at).label("month"),
+                func.count(Trek.trek_id).label("cnt"),
+            )
+            .group_by("month")
+            .order_by("month")
+            .all()
+        )
+
+        # ---- featured / most popular trek by name (active bookings only) ----
+        featured_row = (
+            db.session.query(Trek.trek_name, func.count(Participant.participant_id).label("cnt"))
+            .join(Booking, Booking.trek_id == Trek.trek_id)
+            .join(Participant, Participant.booking_id == Booking.booking_id)
+            .filter(Booking.status != BookingStatus.CANCELLED)
+            .filter(latest_only)
+            .group_by(Trek.trek_id)
+            .order_by(func.count(Participant.participant_id).desc())
+            .first()
+        )
+
+        return {
+            "completion_rate_pct": completion_rate,
+            "upcoming_treks": upcoming_treks,
+            "unique_participants": unique_participants,
+            "unique_treks_offered": unique_trek_names,
+            "unique_destinations": unique_destinations,
+            "difficulty_mix": difficulty_mix,
+            "treks_this_year": treks_this_year,
+            "treks_last_year": treks_last_year,
+            "busiest_month": busiest_month,
+            "avg_treks_per_month": avg_treks_per_month,
+            "total_participant_days": total_participant_days,
+            "featured_trek": featured_row.trek_name if featured_row else None,
+            "growth": {
+                "participants": {
+                    "labels": [r.month for r in participant_growth_rows],
+                    "data": [r.cnt for r in participant_growth_rows],
+                },
+                "treks": {
+                    "labels": [r.month for r in trek_growth_rows],
+                    "data": [r.cnt for r in trek_growth_rows],
+                },
+            },
+        }, 200
+
+# ######################################################################################################################################################## #
 
 # -------------------------------------------------------Trek--------------------------------------------------------------------------------------
 class TrekListResource(Resource):
@@ -228,6 +400,12 @@ class TrekListResource(Resource):
             status=TrekStatus.PENDING,
             assigned_staff_id=int(data.get("assigned_staff_id")) if data.get("assigned_staff_id") not in (None, '') else None
         )
+
+        if new_trek.start_date and new_trek.start_date < date.today() + timedelta(days=1):
+            return {"msg": "Start date must be tomorrow or later"}, 400
+
+        requested_status = data.get("status", TrekStatus.PENDING)
+        msg = "Trek created successfully"
 
         requested_status = data.get("status", TrekStatus.PENDING)
         msg = "Trek created successfully"
@@ -295,6 +473,9 @@ class TrekResource(Resource):
         if "images" in data and data["images"]:
             trek.images = data["images"]
 
+        if "start_date" in data and trek.start_date and trek.start_date < date.today() + timedelta(days=1):
+            return {"msg": "Start date must be tomorrow or later"}, 400
+
         msg = "Trek updated successfully"
         cancelled_pending = []
 
@@ -309,6 +490,8 @@ class TrekResource(Resource):
                 trek.status = requested_status
                 if requested_status == TrekStatus.CLOSED:
                     cancelled_pending = cancel_pending_bookings_for_trek(trek)
+                if requested_status == TrekStatus.CANCELLED:
+                    cancelled_pending = cancel_pending_bookings_for_trek(trek, include_paid=True)
                 if requested_status == TrekStatus.COMPLETED:
                     bookings = Booking.query.filter_by(trek_id=trek_id).filter(Booking.status == BookingStatus.BOOKED).all()
                     for booking in bookings:
@@ -346,111 +529,9 @@ class TrekResource(Resource):
         cache.delete("admin_stats")
 
         return {"msg": "Trek deleted successfully"}, 200
-    
-# ----------------------------------------------------------------Staff-------------------------------------------------------------------------
 
-class StaffTrekListResource(Resource):
-    """
-    GET /staff/treks — returns only the treks assigned to the logged-in staff member
-    """
-    @jwt_required()
-    @role_required([UserRole.STAFF])
-    def get(self):
-        current_user = get_current_user()
-        treks = Trek.query.filter_by(assigned_staff_id=current_user.user_id).all()
-        return [trek.serialize() for trek in treks]
-    
-class TrekStaffUpdateResource(Resource):
-    @jwt_required()
-    @role_required([UserRole.STAFF])
-    def put(self, trek_id):
-        trek = Trek.query.get(trek_id)
-        if not trek:
-            return {"msg": "Trek not found"}, 404
-        
-        current_user = get_current_user()
-        if trek.assigned_staff_id != current_user.user_id:
-            return {"msg": "Unauthorized - this trek is not assigned to you"}, 403
-        
-        data = request.get_json() or {}
-        updated = False
 
-        if "available_slots" in data:
-            try:
-                slots = int(data["available_slots"])
-                if slots < 0:
-                    return {"msg": "available_slots must be 0 or greater"}, 400
-                trek.available_slots = slots
-                updated = True
-            except (TypeError, ValueError):
-                return {"msg": "available_slots must be an integer"}, 400
 
-        msg = "Trek updated by staff successfully"
-        
-        cancelled_pending = []
-        if "status" in data:
-            if data["status"] not in [TrekStatus.OPEN, TrekStatus.CLOSED]:
-                return {"msg": "Staff may only set status to Open or Closed"}, 400
-
-            if data["status"] == TrekStatus.CLOSED and trek.status != TrekStatus.OPEN:
-                return {"msg": "Trek must be Open before it can be Closed"}, 400
-
-            if data["status"] == TrekStatus.OPEN and not trek_is_complete(trek):
-                trek.status = TrekStatus.PENDING
-                msg = "Some fields are missing, so this trek was saved as Pending. Fill in all fields to mark it Open."
-            else:
-                trek.status = data["status"]
-                if data["status"] == TrekStatus.CLOSED:
-                    cancelled_pending = cancel_pending_bookings_for_trek(trek)
-            updated = True
-
-        if data.get("complete") is True:
-            trek.status = TrekStatus.COMPLETED
-            bookings = Booking.query.filter_by(trek_id=trek_id).filter(Booking.status == BookingStatus.BOOKED).all()
-            for booking in bookings:
-                booking.status = BookingStatus.COMPLETED
-            updated = True
-
-        if not updated:
-            return {"msg": "No valid staff-managed trek fields provided"}, 400
-
-        db.session.commit()
-
-        for booking in cancelled_pending:
-            send_pending_cancelled_email.delay(booking.booking_id)
-
-        cache.delete("treks_all")
-        cache.delete("user_treks")
-        cache.delete("admin_stats")
-
-        return {"msg": msg, "trek": trek.serialize()}
-
-def _user_bookings_cache_key(*args, **kwargs):
-    return f"user_bookings_{get_jwt_identity()}"
-
-class UserBookingSummaryResource(Resource):
-    @jwt_required()
-    @cache.cached(timeout=30, make_cache_key=_user_bookings_cache_key)
-    def get(self):
-        current_user = get_current_user()
-        bookings = Booking.query.filter_by(user_id=current_user.user_id).all()
-
-        # latest booking per trek
-        latest_map = {}
-        for b in bookings:
-            existing = latest_map.get(b.trek_id)
-            if not existing or b.booking_date > existing.booking_date:
-                latest_map[b.trek_id] = b
-
-        result = []
-        for b in latest_map.values():
-            trek = Trek.query.get(b.trek_id)
-            data = b.serialize()
-            data['trek'] = trek.serialize() if trek else None
-            result.append(data)
-
-        return result, 200
-    
 #--------------------------------------------------------------------------Booking----------------------------------------------------------------
 
 IST_OFFSET = timedelta(hours=5, minutes=30)   # Indian Standard Time
@@ -459,7 +540,10 @@ IST_OFFSET = timedelta(hours=5, minutes=30)   # Indian Standard Time
 class BookingListResource(Resource):
     """
     POST /bookings  — create a new booking with participants (user)
-    GET  /bookings  — list all bookings (admin / staff)
+    GET  /bookings  — list all bookings 
+        admin - get all bookings - AdminBookings
+        staff - view for each assigned trek (View Bookings)
+        user - for History of the user
     """
  
     @jwt_required()
@@ -644,96 +728,123 @@ class BookingResource(Resource):
 
         return {"msg": "Booking cancelled successfully"}, 200
     
-#-------------------------------------------------Pending Users------------------------------------------------------------------------------------
-# User Approval (Admin only)
-class UserApprovalResource(Resource):
-    @jwt_required()
-    @role_required([UserRole.ADMIN])
-    def get(self):
-        users = User.query.filter(User.status.in_(["blacklisted"])).all()
-        return jsonify([user.serialize() for user in users])
+# ----------------------------------------------------------------Staff-------------------------------------------------------------------------
 
+class StaffTrekListResource(Resource):
+    """
+    GET /staff/treks — returns only the treks assigned to the logged-in staff member
+    """
     @jwt_required()
-    @role_required([UserRole.ADMIN])
-    def put(self, user_id):
-        user = User.query.get(user_id)
-        data = request.get_json()
-        status = data.get('status')
-        if not user:
-            return jsonify({"msg": "User not found"})
+    @role_required([UserRole.STAFF])
+    def get(self):
+        current_user = get_current_user()
+        treks = Trek.query.filter_by(assigned_staff_id=current_user.user_id).all()
+        return [trek.serialize() for trek in treks]
+    
+class TrekStaffUpdateResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.STAFF])
+    def put(self, trek_id):
+        trek = Trek.query.get(trek_id)
+        if not trek:
+            return {"msg": "Trek not found"}, 404
         
-        user.status = status
+        current_user = get_current_user()
+        if trek.assigned_staff_id != current_user.user_id:
+            return {"msg": "Unauthorized - this trek is not assigned to you"}, 403
+        
+        data = request.get_json() or {}
+        updated = False
+
+        if "available_slots" in data:
+            try:
+                slots = int(data["available_slots"])
+                if slots < 0:
+                    return {"msg": "available_slots must be 0 or greater"}, 400
+                trek.available_slots = slots
+                updated = True
+            except (TypeError, ValueError):
+                return {"msg": "available_slots must be an integer"}, 400
+
+        msg = "Trek updated by staff successfully"
+        
+        cancelled_pending = []
+        if "status" in data:
+            if data["status"] not in [TrekStatus.OPEN, TrekStatus.CLOSED]:
+                return {"msg": "Staff may only set status to Open or Closed"}, 400
+
+            if data["status"] == TrekStatus.CLOSED and trek.status != TrekStatus.OPEN:
+                return {"msg": "Trek must be Open before it can be Closed"}, 400
+
+            if data["status"] == TrekStatus.OPEN and not trek_is_complete(trek):
+                trek.status = TrekStatus.PENDING
+                msg = "Some fields are missing, so this trek was saved as Pending. Fill in all fields to mark it Open."
+            else:
+                trek.status = data["status"]
+                if data["status"] == TrekStatus.CLOSED:
+                    cancelled_pending = cancel_pending_bookings_for_trek(trek)
+            updated = True
+
+        if data.get("complete") is True:
+            trek.status = TrekStatus.COMPLETED
+            bookings = Booking.query.filter_by(trek_id=trek_id).filter(Booking.status == BookingStatus.BOOKED).all()
+            for booking in bookings:
+                booking.status = BookingStatus.COMPLETED
+            updated = True
+
+        if not updated:
+            return {"msg": "No valid staff-managed trek fields provided"}, 400
+
         db.session.commit()
-        cache.delete("users_all")
+
+        for booking in cancelled_pending:
+            send_pending_cancelled_email.delay(booking.booking_id)
+
+        cache.delete("treks_all")
+        cache.delete("user_treks")
         cache.delete("admin_stats")
-        send_status_change_notice.delay(user.user_id)
-        return jsonify({"msg": "User status changed to "+status+" successfully"})
 
-    # @jwt_required()
-    # @role_required(["admin"])
-    # def delete(self, user_id):
-    #     user = User.query.get(user_id)
-    #     if not user:
-    #         return jsonify({"msg": "User not found"})
-        
-    #     db.session.delete(user)
-    #     db.session.commit()
-    #     return jsonify({"msg": "User rejected and removed"})
+        return {"msg": msg, "trek": trek.serialize()}
 
-class UsersListResource(Resource):
+# ----------------------------------------------------------------User-------------------------------------------------------------------------
+
+# Recent History - USER: only their History
+def _user_bookings_cache_key(*args, **kwargs):
+    return f"user_bookings_{get_jwt_identity()}"
+
+class UserBookingSummaryResource(Resource):
     @jwt_required()
-    @role_required([UserRole.ADMIN, UserRole.STAFF])
-    @cache.cached(timeout=300, key_prefix="users_all")
+    @cache.cached(timeout=30, make_cache_key=_user_bookings_cache_key)
     def get(self):
-        users = User.query.all()
-        return jsonify([user.serialize() for user in users])
+        current_user = get_current_user()
+        bookings = Booking.query.filter_by(user_id=current_user.user_id).all()
 
-# - USER: only Open/Approved treks
+        # latest booking per trek
+        latest_map = {}
+        for b in bookings:
+            existing = latest_map.get(b.trek_id)
+            if not existing or b.booking_date > existing.booking_date:
+                latest_map[b.trek_id] = b
+
+        result = []
+        for b in latest_map.values():
+            trek = Trek.query.get(b.trek_id)
+            data = b.serialize()
+            data['trek'] = trek.serialize() if trek else None
+            result.append(data)
+
+        return result, 200
+
+
+# Available Treks - USER: only Open/Approved treks
 class UserTrekListResource(Resource) :
     @jwt_required()
     @cache.cached(timeout=120, key_prefix="user_treks")
     def get(self):
         treks = Trek.query. filter(Trek.status.in_([TrekStatus. OPEN, TrekStatus.APPROVED]) ).all()
         return [trek.serialize() for trek in treks]
-    
-# --------------------------------------------------------Admin Staff----------------------------------------------------------------------------
 
-class StaffCreateResource(Resource):
-    @jwt_required()
-    @role_required([UserRole.ADMIN])
-    def post(self):
-        data = request.get_json() or {}
-        username = data.get('username')
-        email = data.get('email')
-        password = data.get('password')
-        contact = data.get('contact')
-
-        if not username or not email or not password:
-            return {"msg": "username, email, and password are required"}, 400
-
-        if User.query.filter_by(email=email).first():
-            return {"msg": "Email already exists"}, 409
-        if User.query.filter_by(username=username).first():
-            return {"msg": "Username already exists"}, 409
-
-        new_staff = User(
-            username=username,
-            email=email,
-            password_hash=generate_password_hash(password),
-            role=UserRole.STAFF,
-            contact=contact,
-            status="active",
-            created_at=datetime.now()
-        )
-        db.session.add(new_staff)
-        db.session.commit()
-        cache.delete("users_all")
-        cache.delete("admin_stats")
-        return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
-
-
-#-------------------------------------------------------------User Profile----------------------------------------------------------------------
-
+# User Profile
 class UserProfileResource(Resource):
     """
     GET /user/profile  — fetch the logged-in user's own profile
@@ -783,6 +894,78 @@ class UserProfileResource(Resource):
         db.session.commit()
         return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
 
+#-------------------------------------------------Admin Dashboard------------------------------------------------------------------------------------
+
+# Pending Users
+
+# User Approval (Admin only)
+class UserApprovalResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    def get(self):
+        users = User.query.filter(User.status.in_(["blacklisted"])).all()
+        return jsonify([user.serialize() for user in users])
+
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    def put(self, user_id):
+        user = User.query.get(user_id)
+        data = request.get_json()
+        status = data.get('status')
+        if not user:
+            return jsonify({"msg": "User not found"})
+        
+        user.status = status
+        db.session.commit()
+        cache.delete("users_all")
+        cache.delete("admin_stats")
+        send_status_change_notice.delay(user.user_id)
+        return jsonify({"msg": "User status changed to "+status+" successfully"})
+
+# --------------------------------------------------------Admin User----------------------------------------------------------------------------
+
+class UsersListResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.ADMIN, UserRole.STAFF])
+    @cache.cached(timeout=300, key_prefix="users_all")
+    def get(self):
+        users = User.query.all()
+        return jsonify([user.serialize() for user in users])
+
+# --------------------------------------------------------Admin Staff----------------------------------------------------------------------------
+
+class StaffCreateResource(Resource):
+    @jwt_required()
+    @role_required([UserRole.ADMIN])
+    def post(self):
+        data = request.get_json() or {}
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        contact = data.get('contact')
+
+        if not username or not email or not password:
+            return {"msg": "username, email, and password are required"}, 400
+
+        if User.query.filter_by(email=email).first():
+            return {"msg": "Email already exists"}, 409
+        if User.query.filter_by(username=username).first():
+            return {"msg": "Username already exists"}, 409
+
+        new_staff = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role=UserRole.STAFF,
+            contact=contact,
+            status="active",
+            created_at=datetime.now()
+        )
+        db.session.add(new_staff)
+        db.session.commit()
+        cache.delete("users_all")
+        cache.delete("admin_stats")
+        return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
 #-----------------------------------------------------------------Admin Stats------------------------------------------------------------------
 class AdminStatsResource(Resource):
@@ -1031,178 +1214,6 @@ class AdminStatsResource(Resource):
             },
         }, 200
     
-#-------------------------------------------Public Stats------------------------------------------------------------
-
-class PublicStatsResource(Resource):
-    """
-    GET /public/stats — no auth required, safe for the homepage.
-    Only exposes aggregate, non-identifying numbers.
-    """
-    @cache.cached(timeout=600, key_prefix="public_stats")
-    def get(self):
-        today = date.today()
-        current_year = today.year
-
-        # ---- de-dup: latest booking per (user, trek), same logic as admin stats ----
-        latest_booking_ids_sq = (
-            db.session.query(func.max(Booking.booking_id).label("booking_id"))
-            .group_by(Booking.user_id, Booking.trek_id)
-            .subquery()
-        )
-        latest_only = Booking.booking_id.in_(
-            db.session.query(latest_booking_ids_sq.c.booking_id)
-        )
-
-        # ---- % of treks completed ----
-        total_treks_ever = Trek.query.count()
-        completed_treks = Trek.query.filter_by(status=TrekStatus.COMPLETED).count()
-        completion_rate = round((completed_treks / total_treks_ever * 100), 1) if total_treks_ever else 0
-
-        # ---- available / upcoming treks right now ----
-        upcoming_treks = Trek.query.filter(
-            Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED])
-        ).count()
-
-        # ---- unique participants (distinct aadhar, from active bookings only) ----
-        unique_participants = (
-            db.session.query(func.count(func.distinct(Participant.aadhar)))
-            .join(Booking, Booking.booking_id == Participant.booking_id)
-            .filter(Booking.status != BookingStatus.CANCELLED)
-            .filter(latest_only)
-            .scalar()
-        ) or 0
-
-        # ---- unique treks offered (by name) & unique destinations ----
-        unique_trek_names = db.session.query(func.count(func.distinct(Trek.trek_name))).scalar() or 0
-        unique_destinations = (
-            db.session.query(func.count(func.distinct(Trek.location)))
-            .filter(Trek.location.isnot(None))
-            .scalar()
-        ) or 0
-
-        # ---- difficulty mix, currently open/approved only ----
-        diff_rows = (
-            db.session.query(Trek.difficulty, func.count(Trek.trek_id))
-            .filter(Trek.status.in_([TrekStatus.OPEN, TrekStatus.APPROVED]))
-            .filter(Trek.difficulty.isnot(None))
-            .group_by(Trek.difficulty)
-            .all()
-        )
-        difficulty_mix = {d: c for d, c in diff_rows}
-
-        # ---- treks conducted: this year vs last year (by start_date, COMPLETED only) ----
-        treks_this_year = Trek.query.filter(
-            Trek.status == TrekStatus.COMPLETED,
-            extract('year', Trek.start_date) == current_year,
-        ).count()
-        treks_last_year = Trek.query.filter(
-            Trek.status == TrekStatus.COMPLETED,
-            extract('year', Trek.start_date) == current_year - 1,
-        ).count()
-
-        # ---- busiest month (calendar month, across all years, COMPLETED treks) ----
-        month_rows = (
-            db.session.query(
-                extract('month', Trek.start_date).label('m'),
-                func.count(Trek.trek_id).label('cnt'),
-            )
-            .filter(Trek.status == TrekStatus.COMPLETED, Trek.start_date.isnot(None))
-            .group_by('m')
-            .order_by(func.count(Trek.trek_id).desc())
-            .first()
-        )
-        month_names = ["", "January", "February", "March", "April", "May", "June",
-                       "July", "August", "September", "October", "November", "December"]
-        busiest_month = month_names[int(month_rows.m)] if month_rows else None
-
-        # ---- average treks per month, last 12 months ----
-        twelve_months_ago = today - timedelta(days=365)
-        recent_trek_count = Trek.query.filter(
-            Trek.status == TrekStatus.COMPLETED,
-            Trek.start_date >= twelve_months_ago,
-        ).count()
-        avg_treks_per_month = round(recent_trek_count / 12, 1)
-
-        # ---- total participant-days delivered (completed treks only) ----
-        participant_days_scalar = (
-            db.session.query(func.sum(Trek.duration_days * Booking.num_people if False else 1))
-            .scalar()
-        )
-        # duration_days * participant count, summed across completed bookings on completed treks
-        pd_rows = (
-            db.session.query(Trek.duration_days, Booking.booking_id)
-            .join(Booking, Booking.trek_id == Trek.trek_id)
-            .filter(Trek.status == TrekStatus.COMPLETED, Booking.status == BookingStatus.COMPLETED)
-            .filter(latest_only)
-            .all()
-        )
-        participant_counts = dict(
-            db.session.query(Participant.booking_id, func.count(Participant.participant_id))
-            .group_by(Participant.booking_id).all()
-        )
-        total_participant_days = sum(
-            (dur or 0) * participant_counts.get(bid, 0) for dur, bid in pd_rows
-        )
-
-        # ---- growth trends: participants & treks over time (monthly) ----
-        participant_growth_rows = (
-            db.session.query(
-                func.strftime("%Y-%m", Booking.booking_date).label("month"),
-                func.count(Participant.participant_id).label("cnt"),
-            )
-            .join(Participant, Participant.booking_id == Booking.booking_id)
-            .filter(Booking.status != BookingStatus.CANCELLED)
-            .filter(latest_only)
-            .group_by("month")
-            .order_by("month")
-            .all()
-        )
-        trek_growth_rows = (
-            db.session.query(
-                func.strftime("%Y-%m", Trek.created_at).label("month"),
-                func.count(Trek.trek_id).label("cnt"),
-            )
-            .group_by("month")
-            .order_by("month")
-            .all()
-        )
-
-        # ---- featured / most popular trek by name (active bookings only) ----
-        featured_row = (
-            db.session.query(Trek.trek_name, func.count(Participant.participant_id).label("cnt"))
-            .join(Booking, Booking.trek_id == Trek.trek_id)
-            .join(Participant, Participant.booking_id == Booking.booking_id)
-            .filter(Booking.status != BookingStatus.CANCELLED)
-            .filter(latest_only)
-            .group_by(Trek.trek_id)
-            .order_by(func.count(Participant.participant_id).desc())
-            .first()
-        )
-
-        return {
-            "completion_rate_pct": completion_rate,
-            "upcoming_treks": upcoming_treks,
-            "unique_participants": unique_participants,
-            "unique_treks_offered": unique_trek_names,
-            "unique_destinations": unique_destinations,
-            "difficulty_mix": difficulty_mix,
-            "treks_this_year": treks_this_year,
-            "treks_last_year": treks_last_year,
-            "busiest_month": busiest_month,
-            "avg_treks_per_month": avg_treks_per_month,
-            "total_participant_days": total_participant_days,
-            "featured_trek": featured_row.trek_name if featured_row else None,
-            "growth": {
-                "participants": {
-                    "labels": [r.month for r in participant_growth_rows],
-                    "data": [r.cnt for r in participant_growth_rows],
-                },
-                "treks": {
-                    "labels": [r.month for r in trek_growth_rows],
-                    "data": [r.cnt for r in trek_growth_rows],
-                },
-            },
-        }, 200
 
 #-------------------------------------------Export Booking History------------------------------------------------------------------------------
 
@@ -1267,32 +1278,32 @@ class ExportTrekParticipantsResource(Resource):
         task = export_trek_participants_csv.delay(trek_id, include_cancelled)
         return {"task_id": task.id}, 202
 
-api.add_resource(Hello,'/')
+api.add_resource(Home,'/')
 api.add_resource(LoginResource,'/login')
 api.add_resource(SignupResource,'/signup')
-api.add_resource(UsersListResource, '/users')
-api.add_resource(UserTrekListResource, '/user/treks')
-api.add_resource(UserApprovalResource,'/users/pending', '/users/<int:user_id>')
+api.add_resource(PublicStatsResource, '/public/stats')
 api.add_resource(TrekListResource, '/treks')
 api.add_resource(TrekResource, '/treks/<int:trek_id>')
+api.add_resource(BookingListResource, '/bookings')
+api.add_resource(BookingResource, '/bookings/<int:booking_id>')
 api.add_resource(StaffTrekListResource, '/staff/treks')
 api.add_resource(TrekStaffUpdateResource, '/treks/<int:trek_id>/staff')
 api.add_resource(UserBookingSummaryResource, '/user/bookings')
-api.add_resource(BookingListResource, '/bookings')
-api.add_resource(BookingResource, '/bookings/<int:booking_id>')
-api.add_resource(StaffCreateResource, '/staff')
+api.add_resource(UserTrekListResource, '/user/treks')
 api.add_resource(UserProfileResource, '/user/profile')
+api.add_resource(UserApprovalResource,'/users/pending', '/users/<int:user_id>')
+api.add_resource(UsersListResource, '/users')
+api.add_resource(StaffCreateResource, '/staff')
+api.add_resource(AdminStatsResource, '/admin/stats')
 api.add_resource(ExportBookingHistoryResource, '/export/booking-history')
 api.add_resource(ExportStatusResource, '/export/status/<string:task_id>')
 api.add_resource(ExportDownloadResource, '/export/download/<string:filename>')
 api.add_resource(ExportTrekParticipantsResource, '/export/trek-participants/<int:trek_id>')
-api.add_resource(AdminStatsResource, '/admin/stats')
-api.add_resource(PublicStatsResource, '/public/stats')
 
 
 #-----------------------------------------------------Scheduling Tasks------------------------------------------------------------------------------
 
-@celery.task(name="tasks.send_daily_reminders")
+@celery.task(name="tasks.send_daily_reminders") # for users with upcoming treks-- 7:00
 def send_daily_reminders():
     with app.app_context():
         today = date.today()
@@ -1349,7 +1360,7 @@ def send_daily_reminders():
 @celery.task(name="tasks.send_close_warning_notice")
 def send_close_warning_notice():
     with app.app_context():
-        target_date = date.today() + timedelta(days=2)
+        target_date = date.today() + timedelta(days=1)
         treks = Trek.query.filter(
             Trek.start_date == target_date,
             Trek.status != TrekStatus.CLOSED
@@ -1397,7 +1408,7 @@ def send_close_warning_notice():
 @celery.task(name="tasks.send_trek_notice")
 def send_trek_notice():
     with app.app_context():
-        target_date = date.today() + timedelta(days=1)
+        target_date = date.today()
         treks = Trek.query.filter_by(start_date=target_date).all()
 
         if not treks:
@@ -1440,7 +1451,7 @@ def send_trek_notice():
                 if recipients:
                     body = (
                         f"Hi,\n\n"
-                        f"The trek '{trek.trek_name}' (starting {trek.start_date}) "
+                        f"The trek '{trek.trek_name}' (starting today, {trek.start_date}) "
                         f"was not closed manually, so it has now been automatically CLOSED.\n\n"
                         f"{len(cancelled_pending)} booking(s) with pending payment "
                         f"were cancelled as a result.\n\n"
@@ -1474,7 +1485,7 @@ def send_trek_notice():
 
                 body = (
                     f"Hi {user.username},\n\n"
-                    f"Your trek '{trek.trek_name}' begins tomorrow — here are the details:\n\n"
+                    f"Your trek '{trek.trek_name}' begins today — here are the details:\n\n"
                     f"  Trek       : {trek.trek_name}\n"
                     f"  Location   : {trek.location or 'TBD'}\n"
                     f"  Start Date : {trek.start_date}\n"
@@ -1483,7 +1494,7 @@ def send_trek_notice():
                     f"Participants registered under this booking:\n"
                     f"{participant_lines}\n\n"
                     f"Before you head out, please keep these in mind:\n\n"
-                    f"  1. Arrive at the meeting point sharp at 7:00 AM tomorrow.\n"
+                    f"  1. Arrive at the meeting point sharp at 7:00 AM today.\n"
                     f"  2. Carry your Aadhar card with you — it's required for verification.\n"
                     f"  3. Pack according to the trek's difficulty and duration.\n"
                     f"  4. No refund will be issued for no-shows, so please plan accordingly.\n\n"
@@ -1492,7 +1503,7 @@ def send_trek_notice():
                 )
                 try:
                     mail.send(Message(
-                        subject=f"Reminder: {trek.trek_name} starts tomorrow!",
+                        subject=f"Reminder: {trek.trek_name} starts today!",
                         recipients=[user.email],
                         body=body,
                     ))
@@ -1511,7 +1522,95 @@ def send_trek_notice():
             f"{auto_closed} auto-closed trek(s), "
             f"{cancelled_total} cancelled booking(s)."
         )
-    
+
+@celery.task(name="tasks.generate_monthly_report")
+def generate_monthly_report():
+    with app.app_context():
+        today = date.today()
+        if today.month == 1:
+            report_month, report_year = 12, today.year - 1
+        else:
+            report_month, report_year = today.month - 1, today.year
+
+        month_name = date(report_year, report_month, 1).strftime("%B %Y")
+
+        treks_conducted = Trek.query.filter(
+            Trek.status == TrekStatus.COMPLETED,
+            extract('month', Trek.start_date) == report_month,
+            extract('year', Trek.start_date) == report_year,
+        ).all()
+
+        trek_ids = [t.trek_id for t in treks_conducted]
+
+        # ── all bookings for these treks (any status) — needed for cancellation rate ──
+        all_bookings = []
+        if trek_ids:
+            all_bookings = Booking.query.filter(Booking.trek_id.in_(trek_ids)).all()
+
+        # ── active bookings only (existing logic, used for participant/popular-trek stats) ──
+        bookings = [b for b in all_bookings if b.status in (BookingStatus.BOOKED, BookingStatus.COMPLETED)]
+
+        participant_user_ids = {b.user_id for b in bookings}
+
+        # Total participants: sum of num_people across COMPLETED bookings only,
+        # on treks that are COMPLETED and started in this month
+        completed_bookings = [b for b in bookings if b.status == BookingStatus.COMPLETED]
+        total_participants = sum(b.num_people or 0 for b in completed_bookings)
+
+        booking_counts = {}
+        for b in bookings:
+            booking_counts[b.trek_id] = booking_counts.get(b.trek_id, 0) + 1
+        top_trek_ids = sorted(booking_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        popular_treks = []
+        for trek_id, count in top_trek_ids:
+            trek = Trek.query.get(trek_id)
+            if trek:
+                popular_treks.append((trek.trek_name, count))
+
+        # ── new stats: total bookings, confirmed revenue, cancellation rate ──
+        total_bookings = len(all_bookings)
+
+        confirmed_revenue = 0
+        for b in completed_bookings:
+            if b.payment_status == PaymentStatus.PAID and b.trek:
+                confirmed_revenue += (b.trek.price or 0) * (b.num_people or 0)
+        confirmed_revenue = round(confirmed_revenue, 2)
+
+        cancelled_count = sum(1 for b in all_bookings if b.status == BookingStatus.CANCELLED)
+        cancellation_rate = round((cancelled_count / total_bookings * 100), 2) if total_bookings else 0
+
+        html_body = _build_report_html(
+            month_name,
+            len(treks_conducted),
+            len(participant_user_ids),
+            total_participants,
+            popular_treks,
+            total_bookings,
+            confirmed_revenue,
+            cancellation_rate,
+        )
+
+        admins = User.query.filter_by(role=UserRole.ADMIN).all()
+        recipients = [a.email for a in admins if a.email]
+
+        if not recipients:
+            print("[Monthly Report] No admin email found.")
+            return "No admin email found"
+
+        try:
+            mail.send(Message(
+                subject=f"TMA Monthly Activity Report - {month_name}",
+                recipients=recipients,
+                html=html_body,
+            ))
+            print(f"[Monthly Report] Sent for {month_name} to {recipients}")
+            return f"Report sent for {month_name}"
+        except Exception as e:
+            print(f"[Monthly Report] Failed to send: {e}")
+            return f"Failed: {e}"
+
+# -----------------------------------------------------------------------Backend Jobs------------------------------------------------------------------------------------
 
 @celery.task(name="tasks.send_status_change_notice")
 def send_status_change_notice(user_id):
@@ -1569,6 +1668,190 @@ TMA Team
             return "Failed to send email."
 
 
+# def cancel_pending_bookings_for_trek(trek):
+#     """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
+#     Frees slots immediately; returns affected bookings so emails can be sent after commit."""
+#     pending_bookings = Booking.query.filter_by(
+#         trek_id=trek.trek_id, status=BookingStatus.BOOKED, payment_status=PaymentStatus.PENDING
+#     ).all()
+
+#     for booking in pending_bookings:
+#         if trek.available_slots is not None:
+#             trek.available_slots += booking.num_people
+#         booking.status = BookingStatus.CANCELLED
+
+#     return pending_bookings
+
+def cancel_pending_bookings_for_trek(trek, include_paid=False):
+    query = Booking.query.filter_by(trek_id=trek.trek_id, status=BookingStatus.BOOKED)
+    if not include_paid:
+        query = query.filter_by(payment_status=PaymentStatus.PENDING)
+    bookings = query.all()
+
+    for booking in bookings:
+        if trek.available_slots is not None:
+            trek.available_slots += booking.num_people
+        booking.status = BookingStatus.CANCELLED
+        if booking.payment_status == PaymentStatus.PAID:
+            booking.payment_status = PaymentStatus.REFUND
+
+    return bookings
+
+@celery.task(name="tasks.send_pending_cancelled_email")
+def send_pending_cancelled_email(booking_id):
+    with app.app_context():
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return "Booking not found"
+        user, trek = booking.user, booking.trek
+        if not user or not user.email:
+            return "User not found or no email"
+
+        if booking.payment_status == PaymentStatus.REFUND:
+            reason_line = (
+                f"Your booking for '{trek.trek_name}' has been automatically CANCELLED "
+                f"because the trek itself was cancelled by the admin. Your payment will be refunded."
+            )
+        else:
+            reason_line = (
+                f"Your booking for '{trek.trek_name}' has been automatically CANCELLED "
+                f"because the trek has been closed. No refund will be initaled as your payment was still pending."
+            )
+
+        body = (
+            f"Hi {user.username},\n\n"
+            f"{reason_line}\n\n"
+            f"Booking ID : {booking.booking_id}\n\n"
+            f"You're welcome to book another available trek.\n\n- TMA Team"
+        )
+        try:
+            mail.send(Message(subject=f"Booking cancelled: {trek.trek_name}",
+                               recipients=[user.email], body=body))
+            return f"Sent to {user.email}"
+        except Exception as e:
+            print(f"[Pending Cancel] Failed to email {user.email}: {e}")
+            return f"Failed: {e}"
+        
+def _build_report_html(month_name, treks_count, users_count, total_participants, popular_treks,
+                        total_bookings, confirmed_revenue, cancellation_rate):
+    max_count = max((c for _, c in popular_treks), default=1)
+    ACCENT = "#3d5a80"
+
+    if popular_treks:
+        rows = ""
+        for i, (name, count) in enumerate(popular_treks):
+            bar_width = max(int((count / max_count) * 100), 8)
+            rows += f"""
+            <tr>
+              <td style="padding:12px 8px; font-size:13px; color:#6b7280; text-align:center; width:32px;">{i+1}</td>
+              <td style="padding:12px 8px;">
+                <div style="font-weight:600; color:#1f2937; font-size:14px; margin-bottom:6px;">{name}</div>
+                <div style="background:#eceef1; border-radius:4px; height:6px; width:100%; overflow:hidden;">
+                  <div style="background:{ACCENT}; height:6px; width:{bar_width}%; border-radius:4px;"></div>
+                </div>
+              </td>
+              <td style="padding:12px 8px; text-align:right; white-space:nowrap;">
+                <span style="font-weight:600; color:#1f2937; font-size:14px;">{count}</span>
+                <span style="color:#9ca3af; font-size:12px;"> bookings</span>
+              </td>
+            </tr>
+            """
+    else:
+        rows = """
+        <tr>
+          <td colspan="3" style="padding:24px 8px; text-align:center; color:#9ca3af; font-size:14px;">
+            No bookings recorded this month
+          </td>
+        </tr>
+        """
+
+    return f"""
+    <html>
+      <body style="margin:0; padding:0; background:#f3f4f6; font-family:'Segoe UI', Arial, sans-serif;">
+        <div style="max-width:600px; margin:0 auto; padding:24px 16px;">
+
+          <!-- Header -->
+          <div style="background:{ACCENT}; border-radius:8px 8px 0 0; padding:28px 24px; color:#ffffff;">
+            <div style="font-size:12px; letter-spacing:1px; text-transform:uppercase; opacity:0.85; margin-bottom:6px;">
+              TMA Monthly Activity Report
+            </div>
+            <div style="font-size:24px; font-weight:700;">{month_name}</div>
+          </div>
+
+          <!-- Stats: row 1 -->
+          <div style="background:#ffffff; padding:20px 20px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="33.33%" style="padding-right:6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">{treks_count}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Treks Conducted</div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding:0 6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">{users_count}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Users Participated</div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding-left:6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">{total_participants}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Total Participants</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Stats: row 2 -->
+          <div style="background:#ffffff; padding:12px 20px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="33.33%" style="padding-right:6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">{total_bookings}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Total Bookings</div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding:0 6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">₹{confirmed_revenue}</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Confirmed Revenue</div>
+                  </div>
+                </td>
+                <td width="33.33%" style="padding-left:6px; vertical-align:top;">
+                  <div style="border:1px solid #e5e7eb; border-radius:8px; padding:14px 10px; text-align:center;">
+                    <div style="font-size:22px; font-weight:700; color:#1f2937;">{cancellation_rate}%</div>
+                    <div style="font-size:11px; color:#6b7280; margin-top:4px;">Cancellation Rate</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Popular treks -->
+          <div style="background:#ffffff; padding:4px 20px 20px;">
+            <div style="font-size:14px; font-weight:700; color:#1f2937; padding-top:8px; border-top:1px solid #f0f0f0;">
+              Most Popular Treks
+            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
+              {rows}
+            </table>
+          </div>
+
+          <!-- Footer -->
+          <div style="background:#ffffff; border-radius:0 0 8px 8px; padding:16px 20px; text-align:center; border-top:1px solid #f0f0f0;">
+            <div style="font-size:12px; color:#9ca3af;">
+              Automated report generated by TMA System &middot; {month_name}
+            </div>
+          </div>
+
+        </div>
+      </body>
+    </html>
+    """
+
 @celery.task(name="tasks.export_booking_history_csv")
 def export_booking_history_csv(user_id):
     with app.app_context():
@@ -1623,232 +1906,10 @@ def export_trek_participants_csv(trek_id, include_cancelled):
 
         return filename
 
-
-@celery.task(name="tasks.send_pending_cancelled_email")
-def send_pending_cancelled_email(booking_id):
-    with app.app_context():
-        booking = Booking.query.get(booking_id)
-        if not booking:
-            return "Booking not found"
-        user, trek = booking.user, booking.trek
-        if not user or not user.email:
-            return "User not found or no email"
-
-        body = (
-            f"Hi {user.username},\n\n"
-            f"Your booking for '{trek.trek_name}' has been automatically CANCELLED "
-            f"because the trek has been closed and your payment was still pending.\n\n"
-            f"Booking ID : {booking.booking_id}\n\n"
-            f"You're welcome to book another available trek.\n\n- TMA Team"
-        )
-        try:
-            mail.send(Message(subject=f"Booking cancelled: {trek.trek_name}",
-                               recipients=[user.email], body=body))
-            return f"Sent to {user.email}"
-        except Exception as e:
-            print(f"[Pending Cancel] Failed to email {user.email}: {e}")
-            return f"Failed: {e}"
-
-@celery.task(name="tasks.generate_monthly_report")
-def generate_monthly_report():
-    with app.app_context():
-        today = date.today()
-        if today.month == 1:
-            report_month, report_year = 12, today.year - 1
-        else:
-            report_month, report_year = today.month, today.year
-
-        month_name = date(report_year, report_month, 1).strftime("%B %Y")
-
-        treks_conducted = Trek.query.filter(
-            Trek.status == TrekStatus.COMPLETED,
-            extract('month', Trek.start_date) == report_month,
-            extract('year', Trek.start_date) == report_year,
-        ).all()
-
-        trek_ids = [t.trek_id for t in treks_conducted]
-        bookings = []
-        if trek_ids:
-            bookings = Booking.query.filter(
-                Booking.trek_id.in_(trek_ids),
-                Booking.status.in_([BookingStatus.BOOKED, BookingStatus.COMPLETED])
-            ).all()
-
-        participant_user_ids = {b.user_id for b in bookings}
-
-        # Total participants: sum of num_people across COMPLETED bookings only,
-        # on treks that are COMPLETED and started in this month
-        completed_bookings = [b for b in bookings if b.status == BookingStatus.COMPLETED]
-        total_participants = sum(b.num_people or 0 for b in completed_bookings)
-
-        booking_counts = {}
-        for b in bookings:
-            booking_counts[b.trek_id] = booking_counts.get(b.trek_id, 0) + 1
-        top_trek_ids = sorted(booking_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-
-        popular_treks = []
-        for trek_id, count in top_trek_ids:
-            trek = Trek.query.get(trek_id)
-            if trek:
-                popular_treks.append((trek.trek_name, count))
-
-        html_body = _build_report_html(
-            month_name,
-            len(treks_conducted),
-            len(participant_user_ids),
-            total_participants,
-            popular_treks,
-        )
-
-        admins = User.query.filter_by(role=UserRole.ADMIN).all()
-        recipients = [a.email for a in admins if a.email]
-
-        if not recipients:
-            print("[Monthly Report] No admin email found.")
-            return "No admin email found"
-
-        try:
-            mail.send(Message(
-                subject=f"TMA Monthly Activity Report - {month_name}",
-                recipients=recipients,
-                html=html_body,
-            ))
-            print(f"[Monthly Report] Sent for {month_name} to {recipients}")
-            return f"Report sent for {month_name}"
-        except Exception as e:
-            print(f"[Monthly Report] Failed to send: {e}")
-            return f"Failed: {e}"
-
-#-----------------------------------------------------------------------------------Backend Jobs------------------------------------------------------------------------------------
-
-def cancel_pending_bookings_for_trek(trek):
-    """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
-    Frees slots immediately; returns affected bookings so emails can be sent after commit."""
-    pending_bookings = Booking.query.filter_by(
-        trek_id=trek.trek_id, status=BookingStatus.BOOKED, payment_status=PaymentStatus.PENDING
-    ).all()
-
-    for booking in pending_bookings:
-        if trek.available_slots is not None:
-            trek.available_slots += booking.num_people
-        booking.status = BookingStatus.CANCELLED
-
-    return pending_bookings
-
-def _build_report_html(month_name, treks_count, users_count, total_participants, popular_treks):
-    # Build ranked rows for popular treks with a visual bar + medal for top 3
-    medals = ["🥇", "🥈", "🥉"]
-    max_count = max((c for _, c in popular_treks), default=1)
-
-    if popular_treks:
-        rows = ""
-        for i, (name, count) in enumerate(popular_treks):
-            rank_label = medals[i] if i < 3 else f"#{i+1}"
-            bar_width = max(int((count / max_count) * 100), 8)
-            rows += f"""
-            <tr>
-              <td style="padding:14px 8px; font-size:20px; text-align:center; width:40px;">{rank_label}</td>
-              <td style="padding:14px 8px;">
-                <div style="font-weight:600; color:#1f2937; font-size:14px; margin-bottom:6px;">{name}</div>
-                <div style="background:#eef2f7; border-radius:6px; height:8px; width:100%; overflow:hidden;">
-                  <div style="background:linear-gradient(90deg,#6366f1,#8b5cf6); height:8px; width:{bar_width}%; border-radius:6px;"></div>
-                </div>
-              </td>
-              <td style="padding:14px 8px; text-align:right; white-space:nowrap;">
-                <span style="font-weight:700; color:#4f46e5; font-size:15px;">{count}</span>
-                <span style="color:#9ca3af; font-size:12px;"> bookings</span>
-              </td>
-            </tr>
-            """
-    else:
-        rows = """
-        <tr>
-          <td colspan="3" style="padding:24px 8px; text-align:center; color:#9ca3af; font-size:14px;">
-            No bookings recorded this month
-          </td>
-        </tr>
-        """
-
-    return f"""
-    <html>
-      <body style="margin:0; padding:0; background:#f3f4f6; font-family:'Segoe UI', Arial, sans-serif;">
-        <div style="max-width:600px; margin:0 auto; padding:24px 16px;">
-
-          <!-- Header card -->
-          <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed); border-radius:16px 16px 0 0; padding:32px 28px; color:#ffffff;">
-            <div style="font-size:13px; letter-spacing:1.5px; text-transform:uppercase; opacity:0.85; margin-bottom:6px;">
-              TMA Monthly Activity Report
-            </div>
-            <div style="font-size:26px; font-weight:700;">{month_name}</div>
-          </div>
-
-          <!-- Stat cards -->
-          <div style="background:#ffffff; padding:24px 20px;">
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td width="33.33%" style="padding-right:5px; vertical-align:top;">
-                  <div style="background:#f5f3ff; border-radius:12px; padding:16px 10px; text-align:center;">
-                    <div style="font-size:26px; font-weight:800; color:#6d28d9;">{treks_count}</div>
-                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
-                      Treks Conducted
-                    </div>
-                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
-                      Completed treks starting in {month_name}
-                    </div>
-                  </div>
-                </td>
-                <td width="33.33%" style="padding:0 5px; vertical-align:top;">
-                  <div style="background:#eff6ff; border-radius:12px; padding:16px 10px; text-align:center;">
-                    <div style="font-size:26px; font-weight:800; color:#2563eb;">{users_count}</div>
-                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
-                      Users Participated
-                    </div>
-                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
-                      Unique users on those completed treks
-                    </div>
-                  </div>
-                </td>
-                <td width="33.33%" style="padding-left:5px; vertical-align:top;">
-                  <div style="background:#ecfdf5; border-radius:12px; padding:16px 10px; text-align:center;">
-                    <div style="font-size:26px; font-weight:800; color:#059669;">{total_participants}</div>
-                    <div style="font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.3px;">
-                      Total Participants
-                    </div>
-                    <div style="font-size:9px; color:#9ca3af; margin-top:5px; line-height:1.4;">
-                      Headcount across completed bookings
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Popular treks -->
-          <div style="background:#ffffff; padding:4px 20px 24px;">
-            <div style="font-size:15px; font-weight:700; color:#1f2937; margin-bottom:4px; padding-top:8px; border-top:1px solid #f0f0f0;">
-              🏔️ Most Popular Treks
-            </div>
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
-              {rows}
-            </table>
-          </div>
-
-          <!-- Footer -->
-          <div style="background:#ffffff; border-radius:0 0 16px 16px; padding:18px 20px; text-align:center; border-top:1px solid #f0f0f0;">
-            <div style="font-size:12px; color:#9ca3af;">
-              Automated report generated by TMA System &middot; {month_name}
-            </div>
-          </div>
-
-        </div>
-      </body>
-    </html>
-    """
-
-
 #-----------------------------------Celery---------------------------------------
 
 celery.conf.timezone = 'Asia/Kolkata'
+celery.conf.enable_utc = False
 celery.conf.beat_schedule = {
     'daily_reminder': {
         'task': 'tasks.send_daily_reminders',
@@ -1860,11 +1921,12 @@ celery.conf.beat_schedule = {
     },    
     'trek_notice':{
         'task': 'tasks.send_trek_notice',
-        'schedule': crontab(hour=7,minute=5)
+        'schedule': crontab(hour=6,minute=55)
     },
     'monthly_report': {
         'task': 'tasks.generate_monthly_report',
-        'schedule': crontab(day_of_month=1, hour=7, minute=15),
+        'schedule': crontab(minute='*'),
+        # 'schedule': crontab(day_of_month=1, hour=7, minute=15),
     },
 }
 

@@ -10,7 +10,9 @@ import BookingHistory from "../components/BookingHistory.vue";
 import AdminStaff from "../views/Admin/AdminStaff.vue";
 import AdminUsers from "../views/Admin/AdminUsers.vue";
 import AdminStats from "../views/Admin/AdminStats.vue";
-import Profile from "../views/User/Profile.vue";
+import Profile from "../views/User/UserProfile.vue";
+import UserBookings from "../views/User/UserBookings.vue";
+
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -26,7 +28,8 @@ const router = createRouter({
         { path: '/admin/staff', name: 'admin-staff', component: AdminStaff },
         { path: '/admin/users', name: 'admin-users', component: AdminUsers },
         { path: '/profile', name: 'profile', component: Profile, meta: { requiresRole: 'user' } },
-        { path: '/admin/stats', name: 'admin-stats', component: AdminStats }
+        { path: '/admin/stats', name: 'admin-stats', component: AdminStats },
+        { path: '/user/:id/bookings', name: 'user-bookings', component: UserBookings, meta: { requiresRole: 'user' } },
     ]
 });
 

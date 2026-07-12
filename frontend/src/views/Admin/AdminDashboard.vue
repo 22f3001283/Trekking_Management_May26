@@ -1,7 +1,7 @@
 <template>
     <AdminNavbar />
 
-    <div class="container-fluid" style="margin-top: 50px; padding: 24px 80px; background-color: #f6f5fb; min-height: 100vh;">
+    <div class="container-fluid responsive-container" style="margin-top: 100px;">
 
         <!-- Page header -->
         <div class="mb-4">
@@ -12,38 +12,38 @@
         <!-- Stat Cards -->
         <div class="row g-3 mb-5">
             <div class="col-6 col-md-3">
-                <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #9e52eb !important;">
+                <div class="card border h-100">
                     <div class="card-body">
-                        <div class="text-muted text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Treks</div>
-                        <div class="fs-2 fw-bold" style="color: #9e52eb;">{{ stats.treks }}</div>
-                        <div class="text-muted small mt-1">🏔️ across all statuses</div>
+                        <div class="text-muted text-uppercase small mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Treks</div>
+                        <div class="fs-2 fw-bold text-primary">{{ stats.treks }}</div>
+                        <div class="text-muted small mt-1">across all statuses</div>
                     </div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #198754 !important;">
+                <div class="card border h-100">
                     <div class="card-body">
-                        <div class="text-muted text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Users</div>
-                        <div class="fs-2 fw-bold text-success">{{ stats.users }}</div>
-                        <div class="text-muted small mt-1">🧑‍🤝‍🧑 registered accounts</div>
+                        <div class="text-muted text-uppercase small mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Users</div>
+                        <div class="fs-2 fw-bold text-primary">{{ stats.users }}</div>
+                        <div class="text-muted small mt-1">registered accounts</div>
                     </div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #0d6efd !important;">
+                <div class="card border h-100">
                     <div class="card-body">
-                        <div class="text-muted text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Staff</div>
+                        <div class="text-muted text-uppercase small mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Staff</div>
                         <div class="fs-2 fw-bold text-primary">{{ stats.staff }}</div>
-                        <div class="text-muted small mt-1">🧑‍✈️ active guides & crew</div>
+                        <div class="text-muted small mt-1">active guides and crew</div>
                     </div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #fd7e14 !important;">
+                <div class="card border h-100">
                     <div class="card-body">
-                        <div class="text-muted text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Bookings</div>
-                        <div class="fs-2 fw-bold text-warning">{{ stats.bookings }}</div>
-                        <div class="text-muted small mt-1">🎒 all time</div>
+                        <div class="text-muted text-uppercase small mb-1" style="font-size: 0.7rem; letter-spacing: .07em;">Total Bookings</div>
+                        <div class="fs-2 fw-bold text-primary">{{ stats.bookings }}</div>
+                        <div class="text-muted small mt-1">all time</div>
                     </div>
                 </div>
             </div>
@@ -52,21 +52,21 @@
         <!-- Error -->
         <div v-if="error" class="alert alert-danger mb-4">{{ error }}</div>
 
-        <!-- ── Pending Approvals ── -->
+        <!-- Pending Approvals -->
         <div class="mb-5">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="fw-bold mb-0">Pending Approvals</h5>
-                    <p class="text-muted small mb-0">Newly registered accounts awaiting activation</p>
+                    <p class="text-muted small mb-0" style="margin-top: 3px;">Newly registered accounts awaiting activation</p>
                 </div>
-                <button class="btn btn-sm text-white" style="background-color: #9e52eb;" @click="fetchAll" :disabled="loading">
+                <button class="btn btn-sm btn-primary" @click="fetchAll" :disabled="loading">
                     <span v-if="loading" class="spinner-border spinner-border-sm"></span>
-                    <span v-else>↻ Refresh</span>
+                    <span v-else>Refresh</span>
                 </button>
             </div>
 
             <!-- Loading -->
-            <div v-if="loading" class="card shadow-sm border-0 p-3">
+            <div v-if="loading" class="card border p-3">
                 <div v-for="n in 3" :key="n" class="placeholder-glow mb-2">
                     <span class="placeholder col-12 rounded" style="height: 38px; display: block;"></span>
                 </div>
@@ -74,15 +74,14 @@
 
             <!-- Empty -->
             <div v-else-if="pendingUsers.length === 0" class="alert alert-light border text-center py-4">
-                <div class="fs-2 mb-1">✅</div>
-                <p class="mb-0 text-muted">No pending approvals — you're all caught up!</p>
+                <p class="mb-0 text-muted">No pending approvals. You're all caught up.</p>
             </div>
 
             <!-- Table -->
-            <div v-else class="card shadow-sm border-0">
+            <div v-else class="card border">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
-                        <thead class="thead-purple">
+                        <thead class="table-primary">
                             <tr>
                                 <th>Username</th>
                                 <th>Email</th>
@@ -95,30 +94,28 @@
                         </thead>
                         <tbody>
                             <tr v-for="user in pendingUsers" :key="user.user_id">
-                                <td class="fw-semibold" style="color: #9e52eb;">{{ user.username }}</td>
+                                <td class="fw-semibold">{{ user.username }}</td>
                                 <td class="text-muted small">{{ user.email }}</td>
                                 <td class="text-muted small">{{ user.contact || '—' }}</td>
                                 <td>
-                                    <span class="badge rounded-pill" :class="user.role === 'staff' ? 'bg-primary-subtle text-primary-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
-                                        {{ user.role === 'staff' ? '🧑‍✈️ Staff' : '🧑 User' }}
+                                    <span :class="user.role === 'staff' ? 'text-primary fw-semibold' : 'text-secondary fw-semibold'">
+                                        {{ user.role === 'staff' ? 'Staff' : 'User' }}
                                     </span>
                                 </td>
                                 <td class="text-muted small">{{ formatDate(user.created_at) }}</td>
                                 <td>
-                                    <span class="badge rounded-pill" :class="statusBadgeClass(user.status)">{{ user.status }}</span>
+                                    <span class="fw-semibold" :class="statusTextClass(user.status)">{{ user.status }}</span>
                                 </td>
                                 <td>
                                     <button v-if="user.status !== 'active'"
-                                        class="btn btn-sm me-1"
-                                        style="background-color: #e8f5e9; color: #2e7d32; border: none;"
+                                        class="btn btn-sm btn-outline-success me-1"
                                         @click="changeUserStatus(user.user_id, 'active')">
-                                        ✓ Approve
+                                        Approve
                                     </button>
                                     <button v-if="user.status !== 'blacklisted'"
-                                        class="btn btn-sm"
-                                        style="background-color: #fee2e2; color: #b91c1c; border: none;"
+                                        class="btn btn-sm btn-outline-danger"
                                         @click="changeUserStatus(user.user_id, 'blacklisted')">
-                                        ✕ Blacklist
+                                        Blacklist
                                     </button>
                                 </td>
                             </tr>
@@ -128,15 +125,15 @@
             </div>
         </div>
 
-        <!-- ── Pending Treks ── -->
+        <!-- Pending Treks -->
         <div class="mb-4">
             <div class="mb-3">
                 <h5 class="fw-bold mb-0">Pending Treks</h5>
-                <p class="text-muted small mb-0">Treks with incomplete details — fill them in to mark Open or Approved</p>
+                <p class="text-muted small mb-0" style="margin-top: 3px;">Treks with incomplete details — fill them in to mark Open or Approved</p>
             </div>
 
             <!-- Loading -->
-            <div v-if="loading" class="card shadow-sm border-0 p-3">
+            <div v-if="loading" class="card border p-3">
                 <div v-for="n in 3" :key="n" class="placeholder-glow mb-2">
                     <span class="placeholder col-12 rounded" style="height: 38px; display: block;"></span>
                 </div>
@@ -144,17 +141,16 @@
 
             <!-- Empty -->
             <div v-else-if="pendingTreks.length === 0" class="alert alert-light border text-center py-4">
-                <div class="fs-2 mb-1">🏔️</div>
-                <p class="mb-0 text-muted">No pending treks — everything is up to date!</p>
+                <p class="mb-0 text-muted">No pending treks. Everything is up to date.</p>
             </div>
 
             <!-- Table -->
-            <div v-else class="card shadow-sm border-0">
+            <div v-else class="card border">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
-                        <thead class="thead-purple">
+                        <thead class="table-primary">
                             <tr>
-                                <th># ID</th>
+                                <th>ID</th>
                                 <th>Trek Name</th>
                                 <th>Location</th>
                                 <th>Difficulty</th>
@@ -166,32 +162,32 @@
                         </thead>
                         <tbody>
                             <tr v-for="trek in pendingTreks" :key="trek.trek_id">
-                                <td class="fw-bold" style="color: #9e52eb;">#{{ trek.trek_id }}</td>
+                                <td class="fw-semibold text-muted">#{{ trek.trek_id }}</td>
                                 <td class="fw-semibold">{{ trek.trek_name }}</td>
                                 <td class="text-muted small">
                                     <span v-if="trek.location">{{ trek.location }}</span>
-                                    <span v-else class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Missing</span>
+                                    <span v-else class="fw-semibold" style="color: #0e6cc4">Missing</span>
                                 </td>
                                 <td>
-                                    <span v-if="trek.difficulty" class="badge rounded-pill bg-light text-dark border">{{ trek.difficulty }}</span>
-                                    <span v-else class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Missing</span>
+                                    <span v-if="trek.difficulty">{{ trek.difficulty }}</span>
+                                    <span v-else class="fw-semibold" style="color: #0e6cc4">Missing</span>
                                 </td>
                                 <td class="text-muted small">{{ trek.duration_days ? trek.duration_days + ' days' : '—' }}</td>
                                 <td class="text-muted small">{{ trek.price ? '₹' + trek.price : '—' }}</td>
                                 <td>
-                                    <span v-if="trek.assigned_staff_name" class="badge rounded-pill" style="background-color: #ede9fb; color: #5b2ea0;">{{ trek.assigned_staff_name }}</span>
-                                    <span v-else class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Unassigned</span>
+                                    <span v-if="trek.assigned_staff_name" class="text-primary fw-semibold">{{ trek.assigned_staff_name }}</span>
+                                    <span v-else class="text-danger fw-semibold">Unassigned</span>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm me-1 soft-btn" style="background-color: #ede9fb; color: #7c3fc2;"
+                                    <button class="btn btn-sm btn-outline-primary me-1"
                                         @click="handleViewClick(trek)"
                                         data-bs-toggle="modal" data-bs-target="#dashTrekModal">
-                                        👁 View
+                                        <i class="bi bi-eye-fill"></i>
                                     </button>
-                                    <button class="btn btn-sm soft-btn" style="background-color: #fff3cd; color: #856404;"
+                                    <button class="btn btn-sm btn-outline-secondary"
                                         @click="handleEditClick(trek)"
                                         data-bs-toggle="modal" data-bs-target="#dashTrekModal">
-                                        ✏️ Edit
+                                        <i class="bi bi-pencil-fill"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -209,7 +205,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="dashTrekModalLabel">
-                        {{ currentMode === 'edit' ? '✏️ Edit Trek' : '👁 View Trek' }}
+                        {{ currentMode === 'edit' ? 'Edit Trek' : 'View Trek' }}
                         <span v-if="currentTrek" class="text-muted small fw-normal ms-2">#{{ currentTrek.trek_id }}</span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -227,6 +223,9 @@
             </div>
         </div>
     </div>
+    <footer class="bg-light text-center py-3 small" style="margin-top: 20px">
+        © 2026 Trekking Management. All rights reserved.
+    </footer>        
 </template>
 
 <script>
@@ -331,11 +330,11 @@ export default {
             if (!dateStr) return '—'
             return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
         },
-        statusBadgeClass(status) {
+        statusTextClass(status) {
             return {
-                active:      'bg-success-subtle text-success-emphasis',
-                blacklisted: 'bg-danger-subtle text-danger-emphasis',
-            }[status] || 'bg-light text-dark'
+                active:      'text-success',
+                blacklisted: 'text-danger',
+            }[status] || 'text-muted'
         },
     },
     mounted() {
@@ -349,15 +348,38 @@ export default {
     },
 }
 </script>
-
 <style scoped>
-.thead-purple th {
-    background-color: #f3edff;
-    color: #7c3fc2;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
+
+.card {
+    border: 1px solid #dfe3ea;
+    border-radius: 8px;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
-.soft-btn { border: none; }
-.soft-btn:hover { opacity: .8; }
+.card:hover {
+    border-color: #c7d1f2;
+    background-color: #eef4ff;
+    box-shadow: 0 4px 14px rgba(23, 43, 99, 0.08);
+}
+
+.card-title {
+    font-weight: 600;
+    color: #1b2430;
+}
+
+.card-text {
+    color: #4b5563;
+    font-size: 0.92rem;
+}
+
+.responsive-container {
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+@media (min-width: 992px) {
+    .responsive-container {
+        padding-left: 100px;
+        padding-right: 100px;
+    }
+}
 </style>
