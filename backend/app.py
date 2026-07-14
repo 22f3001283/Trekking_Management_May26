@@ -387,6 +387,26 @@ class PublicStatsResource(Resource):
 # ######################################################################################################################################################## #
 
 # -------------------------------------------------------Trek--------------------------------------------------------------------------------------
+
+def staff_has_overlapping_trek(staff_id, start_date, end_date, exclude_trek_id=None):
+    """Return the first trek (if any) already assigned to this staff member
+    whose date range overlaps [start_date, end_date]. Cancelled treks don't count."""
+    if staff_id is None or start_date is None or end_date is None:
+        return None
+
+    query = Trek.query.filter(
+        Trek.assigned_staff_id == staff_id,
+        Trek.status != TrekStatus.CANCELLED,
+        Trek.start_date.isnot(None),
+        Trek.end_date.isnot(None),
+        Trek.start_date <= end_date,
+        Trek.end_date >= start_date,
+    )
+    if exclude_trek_id is not None:
+        query = query.filter(Trek.trek_id != exclude_trek_id)
+
+    return query.first()
+
 class TrekListResource(Resource):
     @jwt_required()
     @cache.cached(timeout=120, key_prefix="treks_all")
@@ -416,6 +436,19 @@ class TrekListResource(Resource):
 
         if new_trek.start_date and new_trek.start_date < date.today() + timedelta(days=1):
             return {"msg": "Start date must be tomorrow or later"}, 400
+
+        # NEW: staff double-booking check
+        conflict = staff_has_overlapping_trek(
+            new_trek.assigned_staff_id, new_trek.start_date, new_trek.end_date
+        )
+        if conflict:
+            return {
+                "msg": f"Assigned staff already has an overlapping trek "
+                    f"'{conflict.trek_name}' ({conflict.start_date} to {conflict.end_date})"
+            }, 409
+
+        requested_status = data.get("status", TrekStatus.PENDING)
+        msg = "Trek created successfully"
 
         requested_status = data.get("status", TrekStatus.PENDING)
         msg = "Trek created successfully"
@@ -488,6 +521,19 @@ class TrekResource(Resource):
 
         if "start_date" in data and trek.start_date and trek.start_date < date.today() + timedelta(days=1):
             return {"msg": "Start date must be tomorrow or later"}, 400
+
+        # NEW: staff double-booking check
+        conflict = staff_has_overlapping_trek(
+            trek.assigned_staff_id, trek.start_date, trek.end_date, exclude_trek_id=trek.trek_id
+        )
+        if conflict:
+            return {
+                "msg": f"Assigned staff already has an overlapping trek "
+                    f"'{conflict.trek_name}' ({conflict.start_date} to {conflict.end_date})"
+            }, 409
+
+        msg = "Trek updated successfully"
+        cancelled_pending = []
 
         msg = "Trek updated successfully"
         cancelled_pending = []

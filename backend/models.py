@@ -210,7 +210,7 @@ def init_db(app):
         if not admin:
             admin = User(
                 username      = "admin",
-                email         = "admin@tma.com",
+                email         = "22f3001283@ds.study.iitm.ac.in",
                 password_hash = generate_password_hash("admin123"),  
                 role          = UserRole.ADMIN,
                 contact       = None,
