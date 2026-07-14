@@ -21,16 +21,16 @@ const router = createRouter({
         { path: '/', name: 'home', component: Home },
         { path: '/login', name: 'login', component: LoginView },
         { path: '/signup', name: 'signup', component: SignupView },
-        { path: '/admin', name: 'admin', component: AdminDashboard},
-        { path: '/admin/treks', name: 'admin-treks', component: AdminTrek },
-        { path: '/staff/:id', name: 'staff', component: StaffDashboard },
-        { path: '/user/:id', name: 'user', component: UserDashboard },
+        { path: '/admin', name: 'admin', component: AdminDashboard, meta: { requiresRole: 'admin' } },
+        { path: '/admin/treks', name: 'admin-treks', component: AdminTrek, meta: { requiresRole: 'admin' }  },
+        { path: '/staff/:id', name: 'staff', component: StaffDashboard, meta: { requiresRole: 'staff' }  },
+        { path: '/user/:id', name: 'user', component: UserDashboard, meta: { requiresRole: 'user' }  },
         { path: '/bookings', name: 'bookings', component: BookingHistory },
-        { path: '/admin/staff', name: 'admin-staff', component: AdminStaff },
-        { path: '/admin/users', name: 'admin-users', component: AdminUsers },
-        { path: '/user/:id/profile', name: 'user-profile', component: UserProfile },
-        { path: '/staff/:id/profile', name: 'staff-profile', component: StaffProfile },
-        { path: '/admin/stats', name: 'admin-stats', component: AdminStats },
+        { path: '/admin/staff', name: 'admin-staff', component: AdminStaff, meta: { requiresRole: 'admin' } },
+        { path: '/admin/users', name: 'admin-users', component: AdminUsers, meta: { requiresRole: 'admin' } },
+        { path: '/user/:id/profile', name: 'user-profile', component: UserProfile, meta: { requiresRole: 'user' }  },
+        { path: '/staff/:id/profile', name: 'staff-profile', component: StaffProfile, meta: { requiresRole: 'staff' } },
+        { path: '/admin/stats', name: 'admin-stats', component: AdminStats, meta: { requiresRole: 'admin' } },
         { path: '/user/:id/bookings', name: 'user-bookings', component: UserBookings, meta: { requiresRole: 'user' } },
     ]
 });
@@ -41,8 +41,13 @@ router.beforeEach((to, from, next) => {
     const role = localStorage.getItem('role')
 
     if (to.meta.requiresRole && to.meta.requiresRole !== role) {
-        localStorage.clear()
-        return next('/login')
+        if (!token || !role) {
+            // not logged in at all — send to login
+            return next('/login')
+        }
+        // logged in, just wrong role — bounce to their own home instead of logging out
+        const home = { admin: '/admin', staff: `/staff/${userId}`, user: `/user/${userId}` }[role] || '/login'
+        return next(home)
     }
     next()
 })

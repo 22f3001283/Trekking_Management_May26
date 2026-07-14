@@ -618,6 +618,7 @@ class BookingListResource(Resource):
     """
  
     @jwt_required()
+    @role_required([UserRole.USER])
     def post(self):
         data = request.get_json() or {}
  
