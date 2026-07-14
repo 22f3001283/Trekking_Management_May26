@@ -1,8 +1,13 @@
 <template>
   <div>
-    <UserNavbar />
+    <StaffNavbar />
 
     <div class="container" style="padding-top: 90px; padding-bottom: 60px;">
+
+      <!-- Back link -->
+      <button v-if="backPath" class="btn btn-light mb-3" type="button" @click="$router.push(backPath)">
+        <i class="bi bi-arrow-left"></i>  Back to dashboard
+      </button>
 
       <!-- Loading state -->
       <div v-if="loading" class="text-center py-5">
@@ -209,11 +214,11 @@
 </template>
 <script>
 import axios from 'axios'
-import UserNavbar from '../../components/UserNavbar.vue'
+import StaffNavbar from '../../components/StaffNavbar.vue'
 
 export default {
-  name: 'Profile',
-  components: { UserNavbar },
+  name: 'StaffProfile',
+  components: { StaffNavbar },
   data() {
     return {
       profile: {},
@@ -254,6 +259,10 @@ export default {
       const d = new Date(this.profile.created_at)
       if (isNaN(d)) return this.profile.created_at
       return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    },
+    backPath() {
+      const userId = localStorage.getItem('user_id')
+      return userId ? `/staff/${userId}` : null
     }
   },
   mounted() {
@@ -268,7 +277,7 @@ export default {
       this.loading = true
       this.loadError = ''
       try {
-        const res = await axios.get('http://127.0.0.1:5000/user/profile', { headers: this.authHeaders() })
+        const res = await axios.get('http://127.0.0.1:5000/staff/profile', { headers: this.authHeaders() })
         this.profile = res.data
       } catch (err) {
         this.loadError =
@@ -334,7 +343,7 @@ export default {
           payload.new_password = this.form.new_password
         }
 
-        const res = await axios.put('http://127.0.0.1:5000/user/profile', payload, { headers: this.authHeaders() })
+        const res = await axios.put('http://127.0.0.1:5000/staff/profile', payload, { headers: this.authHeaders() })
         this.profile = res.data.user || { ...this.profile, ...payload }
         this.editSuccess = res.data.msg || 'Profile updated successfully'
 

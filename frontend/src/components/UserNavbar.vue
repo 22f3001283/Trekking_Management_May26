@@ -62,7 +62,7 @@ export default {
       this.$router.push('/bookings')
     },
     goToProfile() {
-      this.$router.push('/profile')
+      this.$router.push(`/user/${this.userId}/profile`)
     },
     signOut() {
       if (!confirm('Are you sure you want to sign out?')) return

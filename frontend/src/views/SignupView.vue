@@ -58,8 +58,10 @@
                                 v-model="password"
                                 :type="showPassword ? 'text' : 'password'"
                                 class="form-control"
+                                :class="{ 'is-invalid': passwordError }"
                                 placeholder="Password"
                                 autocomplete="new-password"
+                                @input="validatePassword"
                                 required
                             >
                             <button
@@ -79,7 +81,7 @@
                                 </svg>
                             </button>
                         </div>
-
+                            <div v-if="passwordError" class="text-danger small mt-1 mb-2">{{ passwordError }}</div>
                         <div class="input-group mb-3">
                             <span class="input-group-text bg-white text-muted">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -142,10 +144,35 @@ export default {
             email: "",
             password: "",
             contact: "",
+            passwordError: ""
+        }
+    },
+    computed: {
+        passwordRegex() {
+            return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/
         }
     },
     methods: {
+        validatePassword() {
+            if (!this.password) {
+                this.passwordError = ""
+                return false
+            }
+            if (this.password.length < 8 || this.password.length > 20) {
+                this.passwordError = "Password must be 8–20 characters long"
+                return false
+            }
+            if (!this.passwordRegex.test(this.password)) {
+                this.passwordError = "Must include uppercase, lowercase, a digit, and a special character"
+                return false
+            }
+            this.passwordError = ""
+            return true
+        },        
         async signup() {
+            if (!this.validatePassword()) {
+                return
+            }
             try {
                 const formdata = {
                     email: this.email,

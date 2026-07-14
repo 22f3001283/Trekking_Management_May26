@@ -173,6 +173,9 @@
                     <div class="mb-3">
                         <label class="form-label">Available Slots</label>
                         <input type="number" min="0" class="form-control" v-model.number="manageForm.available_slots">
+                        <small class="text-muted">
+                            {{ currentTrek.booked_count || 0 }} participant(s) already booked on this trek.
+                        </small>
                     </div>
 
                     <div class="mb-3">
@@ -191,13 +194,9 @@
                     </div>
                 </div>
                 <div class="modal-footer" v-if="currentTrek">
-                    <button
-                        class="btn btn-success"
-                        @click="handleMarkComplete"
-                        :disabled="!canEditStatus"
-                    >Mark Completed</button>
+                    <button class="btn btn-mark-complete" @click="handleMarkComplete" :disabled="!canEditStatus">Mark Completed</button>
                     <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button class="btn btn-primary" @click="handleSaveChanges" :disabled="!canEditStatus">Save Changes</button>
+                    <button class="btn btn-save-changes" @click="handleSaveChanges" :disabled="!canEditStatus">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -383,28 +382,42 @@ h2,h3 {
     display: inline-block;
 }
 
-.btn {
-    opacity: 1 !important;
-    font-weight: 500;
+.btn-mark-complete {
+    color: #fff;
+    background-color: #198754;
+    border-color: #198754;
 }
 
-.btn-primary {
+.btn-mark-complete:hover:not(:disabled) {
+    background-color: #157347;
+    border-color: #157347;
+    color: #fff;
+}
+
+.btn-mark-complete:disabled {
+    color: #6b7280;
+    background-color: transparent;
+    border-color: #198754;
+    opacity: 1;
+}
+
+.btn-save-changes {
+    color: #fff;
     background-color: #4169e1;
     border-color: #4169e1;
 }
-.btn-primary:hover {
+
+.btn-save-changes:hover:not(:disabled) {
     background-color: #3457c4;
     border-color: #3457c4;
+    color: #fff;
 }
 
-.btn-outline-primary {
-    color: #4169e1;
+.btn-save-changes:disabled {
+    color: #6b7280;
+    background-color: transparent;
     border-color: #4169e1;
-}
-.btn-outline-primary:hover {
-    background-color: #4169e1;
-    border-color: #4169e1;
-    color: #fff;
+    opacity: 1;
 }
 
 .card {

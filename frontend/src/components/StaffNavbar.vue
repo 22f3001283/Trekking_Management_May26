@@ -4,6 +4,12 @@
       <a class="navbar-brand" href="#">Welcome! {{ username }} - Staff</a>
       <div class="d-flex gap-3 align-items-center">
         <div class="icon-wrap">
+          <button class="icon-btn" @click="goToProfile">
+            <img src="../assets/profile.png" alt="Profile" class="nav-icon" />  {{  username  }}
+          </button>
+          <span class="tooltip-label">Profile</span>
+        </div>        
+        <div class="icon-wrap">
           <button class="icon-btn" @click="signOut">
             <img src="../assets/signout.png" alt="Sign Out" class="nav-icon" />
           </button>
@@ -18,10 +24,14 @@
 export default {
   data() {
     return {
-      username: localStorage.getItem('username')
+      username: localStorage.getItem('username'),
+      userId: localStorage.getItem('user_id')
     }
   },
   methods: {
+    goToProfile() {
+      this.$router.push(`/staff/${this.userId}/profile`)
+    },
     signOut() {
       if (!confirm('Are you sure you want to sign out?')) return
       localStorage.removeItem('token')

@@ -146,8 +146,34 @@
                                 <input class="form-control" type="email" v-model="newStaff.email" required>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">Password</label>
-                                <input class="form-control" type="password" v-model="newStaff.password" required>
+                            <label class="form-label">Password</label>
+                            <div class="input-group">
+                                <input
+                                class="form-control"
+                                :class="{ 'is-invalid': staffPasswordError }"
+                                :type="showStaffPassword ? 'text' : 'password'"
+                                v-model="newStaff.password"
+                                @input="validateStaffPassword"
+                                required
+                                >
+                                <button
+                                type="button"
+                                class="input-group-text bg-white text-muted"
+                                @click="showStaffPassword = !showStaffPassword"
+                                :aria-label="showStaffPassword ? 'Hide password' : 'Show password'"
+                                >
+                                <svg v-if="!showStaffPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.6 21.6 0 0 1 5.06-5.94M9.9 4.24A10.6 10.6 0 0 1 12 4c7 0 11 7 11 7a21.6 21.6 0 0 1-2.16 3.19" />
+                                    <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88" />
+                                    <path d="M1 1l22 22" />
+                                </svg>
+                                </button>
+                            </div>
+                            <div v-if="staffPasswordError" class="text-danger small mt-1">{{ staffPasswordError }}</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Contact</label>
@@ -223,23 +249,28 @@ import AdminNavbar from '../../components/AdminNavbar.vue'
 export default {
     components: { AdminNavbar },
     data() {
-        return {
-            users: [],
-            treks: [],
-            loading: false,
-            error: '',
-            searchQuery: '',
-            searchField: 'username',
-            sortBy: '',
-            filterStatus: '',
-            page: 1,
-            perPage: 10,
-            newStaff: { username: '', email: '', password: '', contact: '' },
-            selectedStaffTreks: [],
-            selectedStaffName: '',
-        }
+    return {
+        users: [],
+        treks: [],
+        loading: false,
+        error: '',
+        searchQuery: '',
+        searchField: 'username',
+        sortBy: '',
+        filterStatus: '',
+        page: 1,
+        perPage: 10,
+        newStaff: { username: '', email: '', password: '', contact: '' },
+        staffPasswordError: '',    
+        showStaffPassword: false,
+        selectedStaffTreks: [],
+        selectedStaffName: '',
+    }
     },
     computed: {
+        passwordRegex() {
+            return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/
+        },
         staffList() {
             return this.users.filter(u => u.role === 'staff')
         },
@@ -295,6 +326,8 @@ export default {
         },
         resetNewStaffForm() {
             this.newStaff = { username: '', email: '', password: '', contact: '' }
+            this.staffPasswordError = ''
+            this.showStaffPassword = false
         },
         getAssignedTreks(staffId) {
             return this.treks.filter(t => t.assigned_staff_id === staffId)
@@ -314,7 +347,27 @@ export default {
                 'Cancelled': 'text-danger',
             }[status] || 'text-body'
         },
+        validateStaffPassword() {
+            const pwd = this.newStaff.password
+            if (!pwd) {
+            this.staffPasswordError = 'Password is required'
+            return false
+            }
+            if (pwd.length < 8 || pwd.length > 20) {
+            this.staffPasswordError = 'Password must be 8–20 characters long'
+            return false
+            }
+            if (!this.passwordRegex.test(pwd)) {
+            this.staffPasswordError = 'Must include uppercase, lowercase, a digit, and a special character'
+            return false
+            }
+            this.staffPasswordError = ''
+            return true
+        },        
         async handleAddStaff() {
+            if (!this.validateStaffPassword()) {  
+                return
+            }
             try {
                 const response = await axios.post('http://127.0.0.1:5000/staff', this.newStaff, { headers: this.authHeader() })
                 alert(response.data.msg)
@@ -364,7 +417,7 @@ export default {
             if (this.sortBy === `${field}_asc`) return '↑'
             if (this.sortBy === `${field}_desc`) return '↓'
             return ''
-        }
+        },
     },
     watch: {
         searchQuery() { this.page = 1 },

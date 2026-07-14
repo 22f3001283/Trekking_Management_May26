@@ -102,7 +102,7 @@
                             <button 
                                 v-if="trek.status === 'Open'"
                                 class="btn btn-sm btn-success"
-                                @click="handleBookClick(trek)">
+                                @click="handleBookClick(trek)">       
                                 Book
                             </button>
                             <span v-else-if="trek.status === 'Approved'" class="text-muted small">
@@ -537,30 +537,6 @@ h2 {
     font-weight: 600;
     color: #1b2430;
     letter-spacing: -0.01em;
-}
-
-.btn {
-    opacity: 1 !important;
-    font-weight: 500;
-}
-
-.btn-primary {
-    background-color: #4169e1;
-    border-color: #4169e1;
-}
-.btn-primary:hover {
-    background-color: #3457c4;
-    border-color: #3457c4;
-}
-
-.btn-outline-primary {
-    color: #4169e1;
-    border-color: #4169e1;
-}
-.btn-outline-primary:hover {
-    background-color: #4169e1;
-    border-color: #4169e1;
-    color: #fff;
 }
 
 .card {

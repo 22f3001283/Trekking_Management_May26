@@ -62,10 +62,6 @@
                             </button>
                         </div>
 
-                        <div class="d-flex justify-content-end mb-3">
-                            <a href="#" class="text-brand text-decoration-none fw-semibold small">Forgot password?</a>
-                        </div>
-
                         <button type="submit" class="btn btn-brand w-100 py-2 fw-bold rounded-3 mb-3">Login</button>
 
                         <p class="text-center text-muted small mb-0">

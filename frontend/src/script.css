@@ -77,7 +77,7 @@ body {
   display: flex;
   gap: 12px;
 }
-
+/* 
 .btn {
   display: inline-flex;
   align-items: center;
@@ -95,7 +95,7 @@ body {
   background: #0f62fe;
   color: #fff;
   border-color: #0f62fe;
-}
+} */
 
 .hero-wrap {
   width: 100vw;
@@ -184,26 +184,139 @@ h2,h5 {
   --bs-link-hover-color-rgb: 45, 75, 176;
 }
 
-.btn-primary {
-  --bs-btn-bg: #4169e1;
-  --bs-btn-border-color: #4169e1;
-  --bs-btn-hover-bg: #3557c7;
-  --bs-btn-hover-border-color: #3355c2;
-  --bs-btn-active-bg: #2d4bb0;
-  --bs-btn-active-border-color: #2a46a6;
-  --bs-btn-disabled-bg: #4169e1;
-  --bs-btn-disabled-border-color: #4169e1;
-  --bs-btn-focus-shadow-rgb: 65, 105, 225;
+/* ---- Solid buttons -> look like outline on hover ---- */
+.btn-primary:hover {
+  background-color: transparent !important;
+  color: #4169e1 !important;
+  border-color: #4169e1 !important;
+}
+.btn-secondary:hover {
+  background-color: transparent !important;
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+.btn-success:hover {
+  background-color: transparent !important;
+  color: #198754 !important;
+  border-color: #198754 !important;
+}
+.btn-danger:hover {
+  background-color: transparent !important;
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+}
+.btn-warning:hover {
+  background-color: transparent !important;
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+.btn-info:hover {
+  background-color: transparent !important;
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+.btn-dark:hover {
+  background-color: transparent !important;
+  color: #212529 !important;
+  border-color: #212529 !important;
 }
 
+/* ---- Outline buttons -> look like solid on hover ---- */
+.btn-outline-primary:hover {
+  background-color: #4169e1 !important;
+  color: #fff !important;
+  border-color: #4169e1 !important;
+}
+.btn-outline-secondary:hover {
+  background-color: #6c757d !important;
+  color: #fff !important;
+  border-color: #6c757d !important;
+}
+.btn-outline-success:hover {
+  background-color: #198754 !important;
+  color: #fff !important;
+  border-color: #198754 !important;
+}
+.btn-outline-danger:hover {
+  background-color: #dc3545 !important;
+  color: #fff !important;
+  border-color: #dc3545 !important;
+}
+.btn-outline-warning:hover {
+  background-color: #ffc107 !important;
+  color: #fff !important;
+  border-color: #ffc107 !important;
+}
+.btn-outline-info:hover {
+  background-color: #0dcaf0 !important;
+  color: #fff !important;
+  border-color: #0dcaf0 !important;
+}
+.btn-outline-dark:hover {
+  background-color: #212529 !important;
+  color: #fff !important;
+  border-color: #212529 !important;
+}
+
+/* ---- Solid buttons: white text ---- */
+/* ---- Solid buttons: base state (bg + border + white text) ---- */
+.btn-primary {
+  background-color: #4169e1 !important;
+  border-color: #4169e1 !important;
+  color: #ffffff !important;
+}
+.btn-secondary {
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+  color: #ffffff !important;
+}
+.btn-success {
+  background-color: #198754 !important;
+  border-color: #198754 !important;
+  color: #ffffff !important;
+}
+.btn-danger {
+  background-color: #dc3545 !important;
+  border-color: #dc3545 !important;
+  color: #ffffff !important;
+}
+.btn-warning {
+  background-color: #ffc107 !important;
+  border-color: #ffc107 !important;
+  color: #ffffff !important;
+}
+.btn-info {
+  background-color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+  color: #ffffff !important;
+}
+.btn-dark {
+  background-color: #212529 !important;
+  border-color: #212529 !important;
+  color: #ffffff !important;
+}
+
+/* ---- Outline buttons: respective color text ---- */
 .btn-outline-primary {
-  --bs-btn-color: #4169e1;
-  --bs-btn-border-color: #4169e1;
-  --bs-btn-hover-bg: #4169e1;
-  --bs-btn-hover-border-color: #4169e1;
-  --bs-btn-active-bg: #3557c7;
-  --bs-btn-active-border-color: #3557c7;
-  --bs-btn-focus-shadow-rgb: 65, 105, 225;
+  color: #4169e1 !important;
+}
+.btn-outline-secondary {
+  color: #6c757d !important;
+}
+.btn-outline-success {
+  color: #198754 !important;
+}
+.btn-outline-danger {
+  color: #dc3545 !important;
+}
+.btn-outline-warning {
+  color: #ffc107 !important;
+}
+.btn-outline-info {
+  color: #0dcaf0 !important;
+}
+.btn-outline-dark {
+  color: #212529 !important;
 }
 
 .form-control:focus,

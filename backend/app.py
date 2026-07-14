@@ -1,5 +1,5 @@
 from collections import defaultdict
-import csv
+import csv, re
 from flask import send_from_directory   
 from celery.result import AsyncResult
 from flask import Flask, jsonify, make_response, request
@@ -144,6 +144,16 @@ def user():
 # Create-->post; Read-->get; Update-->put; Delete-->delete
 
 # -----------------------------------------------------  Authentication --------------------------------------------------------------------------
+PASSWORD_REGEX = re.compile(
+    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[A-Za-z\d\W_]{8,20}$'
+)
+
+def validate_password(password):
+    if not password or not (8 <= len(password) <= 20):
+        return False, "Password must be between 8 and 20 characters long"
+    if not PASSWORD_REGEX.match(password):
+        return False, "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
+    return True, None
 
 class Home(Resource):
     def get(self):
@@ -178,6 +188,9 @@ class SignupResource(Resource):
         username = data['username']
         email = data['email']
         password = data['password']
+        is_valid, err = validate_password(password)
+        if not is_valid:
+            return make_response(jsonify({"msg": err}), 400)        
         role = "user"
         contact = data.get('contact', None)
         status = "active"
@@ -739,7 +752,16 @@ class StaffTrekListResource(Resource):
     def get(self):
         current_user = get_current_user()
         treks = Trek.query.filter_by(assigned_staff_id=current_user.user_id).all()
-        return [trek.serialize() for trek in treks]
+        result = []
+        for trek in treks:
+            data = trek.serialize()
+            data['booked_count'] = sum(
+                b.num_people or 0 for b in Booking.query.filter_by(
+                    trek_id=trek.trek_id, status=BookingStatus.BOOKED
+                ).all()
+            )
+            result.append(data)
+        return result
     
 class TrekStaffUpdateResource(Resource):
     @jwt_required()
@@ -806,6 +828,61 @@ class TrekStaffUpdateResource(Resource):
 
         return {"msg": msg, "trek": trek.serialize()}
 
+# Staff Profile
+class StaffProfileResource(Resource):
+    """
+    GET /staff/profile  — fetch the logged-in staff member's own profile
+    PUT /staff/profile  — update the logged-in staff member's own profile
+    """
+
+    @jwt_required()
+    @role_required([UserRole.STAFF])
+    def get(self):
+        current_user = get_current_user()
+        if not current_user:
+            return {"msg": "User not found"}, 404
+        return current_user.serialize(), 200
+
+    @jwt_required()
+    @role_required([UserRole.STAFF])
+    def put(self):
+        current_user = get_current_user()
+        if not current_user:
+            return {"msg": "User not found"}, 404
+
+        data = request.get_json() or {}
+
+        new_username = data.get("username")
+        new_email = data.get("email")
+
+        if new_username and new_username != current_user.username:
+            if User.query.filter_by(username=new_username).first():
+                return {"msg": "Username already exists"}, 409
+            current_user.username = new_username
+
+        if new_email and new_email != current_user.email:
+            if User.query.filter_by(email=new_email).first():
+                return {"msg": "Email already exists"}, 409
+            current_user.email = new_email
+
+        if "contact" in data:
+            current_user.contact = data["contact"] or None
+
+        new_password = data.get("new_password")
+        if new_password:
+            current_password = data.get("current_password")
+            if not current_password or not check_password_hash(current_user.password_hash, current_password):
+                return {"msg": "Current password is incorrect"}, 401
+
+            is_valid, err = validate_password(new_password)
+            if not is_valid:
+                return {"msg": err}, 400
+
+            current_user.password_hash = generate_password_hash(new_password)
+
+        db.session.commit()
+        return {"msg": "Profile updated successfully", "user": current_user.serialize()}, 200
+
 # ----------------------------------------------------------------User-------------------------------------------------------------------------
 
 # Recent History - USER: only their History
@@ -852,6 +929,7 @@ class UserProfileResource(Resource):
     """
  
     @jwt_required()
+    @role_required([UserRole.USER])
     def get(self):
         current_user = get_current_user()
         if not current_user:
@@ -859,6 +937,7 @@ class UserProfileResource(Resource):
         return current_user.serialize(), 200
  
     @jwt_required()
+    @role_required([UserRole.USER])
     def put(self):
         current_user = get_current_user()
         if not current_user:
@@ -889,6 +968,11 @@ class UserProfileResource(Resource):
             current_password = data.get("current_password")
             if not current_password or not check_password_hash(current_user.password_hash, current_password):
                 return {"msg": "Current password is incorrect"}, 401
+
+            is_valid, err = validate_password(new_password)
+            if not is_valid:
+                return {"msg": err}, 400
+
             current_user.password_hash = generate_password_hash(new_password)
  
         db.session.commit()
@@ -947,6 +1031,10 @@ class StaffCreateResource(Resource):
         if not username or not email or not password:
             return {"msg": "username, email, and password are required"}, 400
 
+        is_valid, err = validate_password(password)
+        if not is_valid:
+            return {"msg": err}, 400
+
         if User.query.filter_by(email=email).first():
             return {"msg": "Email already exists"}, 409
         if User.query.filter_by(username=username).first():
@@ -965,8 +1053,11 @@ class StaffCreateResource(Resource):
         db.session.commit()
         cache.delete("users_all")
         cache.delete("admin_stats")
-        return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
 
+        send_staff_credentials_email.delay(new_staff.user_id, password)   # NEW
+
+        return {"msg": "Staff member created successfully", "user": new_staff.serialize()}, 201
+    
 #-----------------------------------------------------------------Admin Stats------------------------------------------------------------------
 class AdminStatsResource(Resource):
     @jwt_required()
@@ -1288,6 +1379,7 @@ api.add_resource(BookingListResource, '/bookings')
 api.add_resource(BookingResource, '/bookings/<int:booking_id>')
 api.add_resource(StaffTrekListResource, '/staff/treks')
 api.add_resource(TrekStaffUpdateResource, '/treks/<int:trek_id>/staff')
+api.add_resource(StaffProfileResource, '/staff/profile')
 api.add_resource(UserBookingSummaryResource, '/user/bookings')
 api.add_resource(UserTrekListResource, '/user/treks')
 api.add_resource(UserProfileResource, '/user/profile')
@@ -1385,7 +1477,7 @@ def send_close_warning_notice():
 
             body = (
                 f"Hi ,\n\n"
-                f"The trek '{trek.trek_name}' starts on {trek.start_date} (2 days from now) "
+                f"The trek '{trek.trek_name}' starts on {trek.start_date} (tomorrow) "
                 f"and is still '{trek.status}', not Closed.\n\n"
                 f"Please close it manually before then. If it isn't closed, the system will "
                 f"automatically close it at 7:05 AM the day before the trek starts, and any "
@@ -1667,7 +1759,45 @@ TMA Team
  
             return "Failed to send email."
 
+@celery.task(name="tasks.send_staff_credentials_email")
+def send_staff_credentials_email(user_id, plain_password):
+    with app.app_context():
+        user = User.query.get(user_id)
+        if not user or not user.email:
+            return "User not found or no email"
 
+        body = f"""
+Hello {user.username},
+
+An account has been created for you on the Trekking Management Application as a Staff member.
+
+Here are your login credentials:
+
+  Username : {user.username}
+  Email    : {user.email}
+  Password : {plain_password}
+
+For security, please log in and change your password as soon as possible.
+
+If you did not expect this account to be created, please contact the admin team.
+
+Best regards,
+
+TMA Team
+        """
+
+        try:
+            mail.send(Message(
+                subject="Your TMA Staff Account Credentials",
+                recipients=[user.email],
+                body=body,
+            ))
+            print(f"[Staff Credentials] Sent to {user.email}")
+            return f"Sent to {user.email}"
+        except Exception as e:
+            print(f"[Staff Credentials] Failed to email {user.email}: {e}")
+            return f"Failed: {e}"
+        
 # def cancel_pending_bookings_for_trek(trek):
 #     """Cancel Booked+Pending-payment bookings for a trek (e.g. when it closes).
 #     Frees slots immediately; returns affected bookings so emails can be sent after commit."""
@@ -1925,8 +2055,8 @@ celery.conf.beat_schedule = {
     },
     'monthly_report': {
         'task': 'tasks.generate_monthly_report',
-        'schedule': crontab(minute='*'),
-        # 'schedule': crontab(day_of_month=1, hour=7, minute=15),
+        # 'schedule': crontab(minute='*'),
+        'schedule': crontab(day_of_month=1, hour=7, minute=15),
     },
 }
 

@@ -140,10 +140,10 @@
                                 <strong>Price:</strong> ₹{{ trek.price }}/person<br>
                                 <strong>Status:</strong> {{ trek.status }}<br>
                             </p>
-                            <div class="d-flex flex-column flex-sm-row gap-2">
+                            <div class="d-flex flex-row flex-wrap gap-2 mb-4">
                                 <button class="btn btn-sm btn-outline-primary" @click="handleViewClick(trek)" data-bs-toggle="modal" data-bs-target="#trekModal"><i class="bi bi-eye"></i></button>
                                 <button class="btn btn-sm btn-outline-secondary" @click="handleEditClick(trek)" data-bs-toggle="modal" data-bs-target="#trekModal"><i class="bi bi-pencil-square"></i></button>
-                                <button class="btn btn-sm btn-outline-danger" @click="handleDeleteTrek(trek.trek_id)"><i class="bi bi-trash3"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @click="handleDeleteTrek(trek.trek_id)"><i class="bi bi-trash3" style="color:crimson;"></i></button>
                             </div>
                         </div>
                     </div>
@@ -351,30 +351,6 @@ export default {
 }
 </script>
 <style scoped>
-.btn {
-    opacity: 1 !important;
-    font-weight: 500;
-}
-
-.btn-primary {
-    background-color: #4169e1;
-    border-color: #4169e1;
-}
-.btn-primary:hover,
-.btn-primary:focus {
-    background-color: #3457c4;
-    border-color: #3457c4;
-}
-
-.btn-outline-primary {
-    color: #4169e1;
-    border-color: #4169e1;
-}
-.btn-outline-primary:hover {
-    background-color: #4169e1;
-    border-color: #4169e1;
-    color: #fff;
-}
 
 .card {
     border: 1px solid #dfe3ea;

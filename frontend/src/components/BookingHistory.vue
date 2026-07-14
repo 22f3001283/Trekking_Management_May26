@@ -134,7 +134,7 @@
                     <div class="modal-header">
                         <div>
                             <h5 class="modal-title" id="bookingDetailModalLabel">Booking #{{ selectedBooking.booking_id }}</h5>
-                            <span class="fw-semibold" :class="statusTextClass(selectedBooking.status)">{{ selectedBooking.status }}</span>
+                            <span class="fw-semibold" :class="statusTextClass(selectedBooking.status)">({{ selectedBooking.status }})</span>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>

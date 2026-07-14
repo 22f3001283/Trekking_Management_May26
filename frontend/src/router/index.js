@@ -10,7 +10,8 @@ import BookingHistory from "../components/BookingHistory.vue";
 import AdminStaff from "../views/Admin/AdminStaff.vue";
 import AdminUsers from "../views/Admin/AdminUsers.vue";
 import AdminStats from "../views/Admin/AdminStats.vue";
-import Profile from "../views/User/UserProfile.vue";
+import UserProfile from "../views/User/UserProfile.vue";
+import StaffProfile from "../views/Staff/StaffProfile.vue";
 import UserBookings from "../views/User/UserBookings.vue";
 
 
@@ -27,7 +28,8 @@ const router = createRouter({
         { path: '/bookings', name: 'bookings', component: BookingHistory },
         { path: '/admin/staff', name: 'admin-staff', component: AdminStaff },
         { path: '/admin/users', name: 'admin-users', component: AdminUsers },
-        { path: '/profile', name: 'profile', component: Profile, meta: { requiresRole: 'user' } },
+        { path: '/user/:id/profile', name: 'user-profile', component: UserProfile },
+        { path: '/staff/:id/profile', name: 'staff-profile', component: StaffProfile },
         { path: '/admin/stats', name: 'admin-stats', component: AdminStats },
         { path: '/user/:id/bookings', name: 'user-bookings', component: UserBookings, meta: { requiresRole: 'user' } },
     ]
