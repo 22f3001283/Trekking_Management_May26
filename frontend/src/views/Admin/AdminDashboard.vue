@@ -57,7 +57,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="fw-bold mb-0">Pending Approvals</h5>
-                    <p class="text-muted small mb-0" style="margin-top: 3px;">Newly registered accounts awaiting activation</p>
+                    <p class="text-muted small mb-0" style="margin-top: 3px;">Accounts awaiting activation</p>
                 </div>
                 <button class="btn btn-sm btn-primary" @click="fetchAll" :disabled="loading">
                     <span v-if="loading" class="spinner-border spinner-border-sm"></span>

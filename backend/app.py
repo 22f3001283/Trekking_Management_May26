@@ -144,9 +144,18 @@ def user():
 # Create-->post; Read-->get; Update-->put; Delete-->delete
 
 # -----------------------------------------------------  Authentication --------------------------------------------------------------------------
+EMAIL_REGEX = re.compile(
+    r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+)
+
 PASSWORD_REGEX = re.compile(
     r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[A-Za-z\d\W_]{8,20}$'
 )
+
+def validate_email(email):
+    if not email or not EMAIL_REGEX.match(email):
+        return False, "Invalid email address"
+    return True, None
 
 def validate_password(password):
     if not password or not (8 <= len(password) <= 20):
@@ -188,6 +197,9 @@ class SignupResource(Resource):
         username = data['username']
         email = data['email']
         password = data['password']
+        is_valid, err = validate_email(email)
+        if not is_valid:
+            return make_response(jsonify({"msg": err}), 400)
         is_valid, err = validate_password(password)
         if not is_valid:
             return make_response(jsonify({"msg": err}), 400)        
@@ -473,7 +485,7 @@ class TrekListResource(Resource):
         db.session.add(new_trek)
         db.session.commit()
 
-        if "images" in data and data["images"]:
+        if "images" in data:
             new_trek.images = data["images"]
             db.session.commit()
 
@@ -516,8 +528,8 @@ class TrekResource(Resource):
                 else:
                     setattr(trek, field, data[field])
 
-        if "images" in data and data["images"]:
-            trek.images = data["images"]
+        if "images" in data:
+            trek.images = data["images"] or None
 
         if "start_date" in data and trek.start_date and trek.start_date < date.today() + timedelta(days=1):
             return {"msg": "Start date must be tomorrow or later"}, 400
@@ -1046,12 +1058,58 @@ class UserApprovalResource(Resource):
             return jsonify({"msg": "User not found"})
         
         user.status = status
+
+        if user.role == UserRole.STAFF and user.status == UserStatus.BLACKLISTED:
+            treks = Trek.query.filter(
+                Trek.assigned_staff_id == user.user_id,
+                Trek.status.in_([
+                    TrekStatus.PENDING,
+                    TrekStatus.APPROVED,
+                    TrekStatus.OPEN
+                ])
+            ).all()
+
+            for trek in treks:
+                trek.assigned_staff_id = None
+                trek.status=TrekStatus.PENDING
+
+        if user.role == UserRole.USER and user.status == UserStatus.BLACKLISTED:
+
+            bookings = Booking.query.join(Trek).filter(
+                Booking.user_id == user.user_id,
+                Booking.status == BookingStatus.BOOKED,
+                Trek.status.in_([
+                    TrekStatus.PENDING,
+                    TrekStatus.APPROVED,
+                    TrekStatus.OPEN
+                ])
+            ).all()
+
+            cancelled_booking_ids = []
+
+            for booking in bookings:
+                booking.status = BookingStatus.CANCELLED
+                if booking.payment_status == PaymentStatus.PAID:
+                    booking.payment_status = PaymentStatus.REFUND
+                booking.trek.available_slots += booking.num_people
+                cancelled_booking_ids.append(booking.booking_id)
+
         db.session.commit()
+
         cache.delete("users_all")
         cache.delete("admin_stats")
-        send_status_change_notice.delay(user.user_id)
-        return jsonify({"msg": "User status changed to "+status+" successfully"})
 
+        send_status_change_notice.delay(user.user_id)
+
+        if user.role == UserRole.USER and user.status == UserStatus.BLACKLISTED:
+            send_blacklisted_cancelled_notice.delay(user.user_id,cancelled_booking_ids)
+            return {"msg": f"User blacklisted. {len(bookings)} booking(s) cancelled."}
+
+        if user.role == UserRole.STAFF and user.status == UserStatus.BLACKLISTED:
+            return {"msg": f"Staff blacklisted. {len(treks)} trek(s) were unassigned."}
+
+        return {"msg": "User status updated successfully."}
+    
 # --------------------------------------------------------Admin User----------------------------------------------------------------------------
 
 class UsersListResource(Resource):
@@ -1073,6 +1131,10 @@ class StaffCreateResource(Resource):
         email = data.get('email')
         password = data.get('password')
         contact = data.get('contact')
+
+        is_valid, err = validate_email(email)
+        if not is_valid:
+            return {"msg": err}, 400
 
         if not username or not email or not password:
             return {"msg": "username, email, and password are required"}, 400
@@ -1907,7 +1969,65 @@ def send_pending_cancelled_email(booking_id):
         except Exception as e:
             print(f"[Pending Cancel] Failed to email {user.email}: {e}")
             return f"Failed: {e}"
-        
+
+@celery.task(name="tasks.send_blacklisted_cancelled_notice")
+def send_blacklisted_cancelled_notice(user_id, booking_ids):
+    with app.app_context():
+
+        user = User.query.get(user_id)
+        if not user:
+            return "User not found"
+
+        bookings = Booking.query.filter(
+            Booking.booking_id.in_(booking_ids)
+        ).all()
+
+        if not bookings:
+            return "No bookings found"
+
+        body = f"""
+Hello {user.username},
+
+Your account has been updated to Blacklisted by the administrator.
+
+As a result, the following trek booking(s) have been cancelled:
+
+"""
+
+        for booking in bookings:
+            body += (
+                f"- {booking.trek.trek_name} "
+                f"(Booking Status: {booking.status}, "
+                f"Payment Status: {booking.payment_status})\n"
+            )
+
+        body += """
+
+All the Paid payments are Refunded.
+
+Once your account status is changed back to Active by the administrator, you will be able to book available treks again.
+
+If you have any questions, please contact the administrator.
+
+Best regards,
+
+TMA Team
+"""
+
+        try:
+            mail.send(Message(
+                subject="Your Trek Booking(s) Have Been Cancelled",
+                recipients=[user.email],
+                body=body,
+            ))
+
+            print(f"Blacklist cancellation email sent to user {user.user_id}")
+            return "Email sent successfully."
+
+        except Exception as e:
+            print(f"Failed to email user {user.user_id}: {e}")
+            return "Failed to send email."
+
 def _build_report_html(month_name, treks_count, users_count, total_participants, popular_treks,
                         total_bookings, confirmed_revenue, cancellation_rate):
     max_count = max((c for _, c in popular_treks), default=1)

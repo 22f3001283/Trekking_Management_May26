@@ -6,7 +6,7 @@
     <div class="container-fluid" style="margin-top: 50px; padding: 24px 80px;">
 
         <!-- Back link, its own row above everything -->
-        <button v-if="backPath" class="btn  btn-light mb-3dropdown-toggle" type="button" @click="$router.push(backPath)" style="margin-bottom: 10px;">
+        <button v-if="backPath" class="btn  btn-light mb-3" type="button" @click="$router.push(backPath)" style="margin-bottom: 10px;">
           <i class="bi bi-arrow-left"></i>  Back to dashboard
         </button>
 
@@ -54,7 +54,7 @@
                 <option value="Paid">Paid</option>
                 <option value="Refund">Refund</option>
             </select>
-            <button v-if="role === 'staff' && $route.query.trek_id" class="btn btn-outline-primary btn-sm" @click="openExportParticipantsModal">
+            <button v-if="['staff', 'admin'].includes(role) && $route.query.trek_id" class="btn btn-outline-primary btn-sm" @click="openExportParticipantsModal">
                 Export participants
             </button>
             <button class="btn btn-outline-primary btn-sm" @click="fetchBookings" :disabled="loading">
@@ -306,6 +306,7 @@ export default {
     },
 
     backPath() {
+      if (this.role === 'admin') return '/admin/treks'
       if (this.role === 'staff') return `/staff/${this.currentUserId}`
       if (this.role === 'user') return `/user/${this.currentUserId}`
       return null

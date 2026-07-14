@@ -73,55 +73,73 @@
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Most Popular Treks</h6>
-                    <canvas ref="popularTreksCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="popularTreksCanvas"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Booking Trends</h6>
-                    <canvas ref="bookingTrendsCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="bookingTrendsCanvas"></canvas>
+                    </div>                    
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Monthly Participation</h6>
-                    <canvas ref="monthlyParticipationCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="monthlyParticipationCanvas"></canvas>
+                    </div>                       
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">User Registrations</h6>
-                    <canvas ref="userRegistrationsCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="userRegistrationsCanvas"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Treks by Status (creation month)</h6>
-                    <canvas ref="treksByStatusCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="treksByStatusCanvas"></canvas>
+                    </div>                  
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Revenue Trend</h6>
-                    <canvas ref="revenueTrendCanvas" height="260"></canvas>
+                    <div style="height:260px;">
+                        <canvas ref="revenueTrendCanvas"></canvas>
+                    </div>                                   
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card border p-4">
+                <div class="card border p-4" style="height:auto; width: auto">
                     <h6 class="fw-bold mb-3">Booking Status</h6>
-                    <canvas ref="bookingStatusCanvas" height="240"></canvas>
+                    <div>
+                        <canvas ref="bookingStatusCanvas"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card border p-4">
+                <div class="card border p-4" style="height:auto; width: auto">
                     <h6 class="fw-bold mb-3">Difficulty Distribution</h6>
-                    <canvas ref="difficultyCanvas" height="240"></canvas>
+                    <div>
+                        <canvas ref="difficultyCanvas"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="card border p-4">
                     <h6 class="fw-bold mb-3">Cancellation Rate over Time</h6>
-                    <canvas ref="cancellationRateCanvas" height="240"></canvas>
+                    <div style="height:240px;">
+                        <canvas ref="cancellationRateCanvas"></canvas>
+                    </div>
                 </div>
             </div>
         </div>

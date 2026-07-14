@@ -143,7 +143,8 @@
                             <div class="d-flex flex-row flex-wrap gap-2 mb-4">
                                 <button class="btn btn-sm btn-outline-primary" @click="handleViewClick(trek)" data-bs-toggle="modal" data-bs-target="#trekModal"><i class="bi bi-eye"></i></button>
                                 <button class="btn btn-sm btn-outline-secondary" @click="handleEditClick(trek)" data-bs-toggle="modal" data-bs-target="#trekModal"><i class="bi bi-pencil-square"></i></button>
-                                <button class="btn btn-sm btn-outline-danger" @click="handleDeleteTrek(trek.trek_id)"><i class="bi bi-trash3" style="color:crimson;"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @click="handleDeleteTrek(trek.trek_id)"><i class="bi bi-trash3""></i></button>
+                                <button class="btn btn-sm btn-primary" @click="handleViewBookings(trek)" title="View Bookings">View Bookings</button>
                             </div>
                         </div>
                     </div>
@@ -328,6 +329,9 @@ export default {
                 console.error('Error deleting trek:', error)
                 alert(error.response?.data?.msg || 'Failed to delete trek')
             }
+        },
+        handleViewBookings(trek) {
+            this.$router.push({ path: '/bookings', query: { trek_id: trek.trek_id } })
         },
         handleCancel() {
             document.activeElement.blur()

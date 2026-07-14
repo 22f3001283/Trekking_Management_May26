@@ -128,7 +128,7 @@ class Trek(db.Model):
             "start_date"       : self.start_date.isoformat() if self.start_date else None,
             "end_date"         : self.end_date.isoformat() if self.end_date else None,
             "created_at"       : self.created_at.isoformat() if self.created_at else None,
-            "images"           : self.images if len(self.images)>0 else ["src/assets/TrekDefault.png"]
+            "images"           : self.images
         }
 
 

@@ -143,7 +143,7 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Email</label>
-                                <input class="form-control" type="email" v-model="newStaff.email" required>
+                                <input class="form-control" type="email" v-model="newStaff.email" pattern="^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$" required>
                             </div>
                             <div class="mb-3">
                             <label class="form-label">Password</label>
@@ -367,6 +367,12 @@ export default {
         async handleAddStaff() {
             if (!this.validateStaffPassword()) {  
                 return
+            }
+            const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+            if (!emailRegex.test(this.email)) {
+                alert("Please enter a valid email address.");
+                return;
             }
             try {
                 const response = await axios.post('http://127.0.0.1:5000/staff', this.newStaff, { headers: this.authHeader() })
