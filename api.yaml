@@ -1,0 +1,116 @@
+api_endpoints:
+  - endpoint: /login
+    method: POST
+    description: Authenticate user and return JWT token
+
+  - endpoint: /signup
+    method: POST
+    description: Register a new user
+
+  - endpoint: /public/stats
+    method: GET
+    description: Public trekking stats for homepage (no auth)
+
+  - endpoint: /treks
+    method: GET
+    description: List all treks
+
+  - endpoint: /treks
+    method: POST
+    description: Create a new trek (admin)
+
+  - endpoint: /treks/<trek_id>
+    method: GET
+    description: Fetch a single trek
+
+  - endpoint: /treks/<trek_id>
+    method: PUT
+    description: Update trek details/status (admin)
+
+  - endpoint: /treks/<trek_id>
+    method: DELETE
+    description: Delete a trek (admin)
+
+  - endpoint: /bookings
+    method: POST
+    description: Create a booking with participants (user)
+
+  - endpoint: /bookings
+    method: GET
+    description: List bookings (role-based scope)
+
+  - endpoint: /bookings/<booking_id>
+    method: GET
+    description: Fetch a single booking
+
+  - endpoint: /bookings/<booking_id>
+    method: DELETE
+    description: Cancel a booking
+
+  - endpoint: /staff/treks
+    method: GET
+    description: List treks assigned to logged-in staff
+
+  - endpoint: /treks/<trek_id>/staff
+    method: PUT
+    description: Staff updates slots/status/completion
+
+  - endpoint: /staff/profile
+    method: GET
+    description: Fetch staff's own profile
+
+  - endpoint: /staff/profile
+    method: PUT
+    description: Update staff's own profile
+
+  - endpoint: /user/bookings
+    method: GET
+    description: User's latest booking per trek
+
+  - endpoint: /user/treks
+    method: GET
+    description: List Open/Approved treks
+
+  - endpoint: /user/profile
+    method: GET
+    description: Fetch user's own profile
+
+  - endpoint: /user/profile
+    method: PUT
+    description: Update user's own profile
+
+  - endpoint: /users/pending
+    method: GET
+    description: List blacklisted users (admin)
+
+  - endpoint: /users/<user_id>
+    method: PUT
+    description: Update user status (admin)
+
+  - endpoint: /users
+    method: GET
+    description: List all users (admin, staff)
+
+  - endpoint: /staff
+    method: POST
+    description: Create a new staff account (admin)
+
+  - endpoint: /admin/stats
+    method: GET
+    description: Admin KPIs and analytics charts
+
+  - endpoint: /export/booking-history
+    method: POST
+    description: Trigger CSV export of booking history
+
+  - endpoint: /export/status/<task_id>
+    method: GET
+    description: Poll export task status
+
+  - endpoint: /export/download/<filename>
+    method: GET
+    description: Download completed export file
+
+  - endpoint: /export/trek-participants/<trek_id>
+    method: POST
+    description: Trigger CSV export of trek participants

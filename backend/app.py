@@ -2211,6 +2211,7 @@ celery.conf.beat_schedule = {
     'daily_reminder': {
         'task': 'tasks.send_daily_reminders',
         'schedule': crontab(hour=7,minute=0),
+        # 'schedule': crontab(minute='*'),
     },
     'close_warning_notice': {
         'task': 'tasks.send_close_warning_notice',
